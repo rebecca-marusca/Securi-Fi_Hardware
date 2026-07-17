@@ -1,0 +1,12 @@
+firebase.json
+securifi.db
+
+__pycache__/
+*.pyc
+
+venv/
+.venv/
+
+.env
+
+.vscode/
