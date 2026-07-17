@@ -28,13 +28,13 @@ def init_db():
 	# ce tine de users
 	c.execute('''CREATE TABLE IF NOT EXISTS fcm_tokens (
 		user_id TEXT PRIMARY KEY,
-		armed INTEGER DEFAULT 0
+		token TEXT
 	)''')
 
 	# ce tine de casa ta
 	c.execute('''CREATE TABLE IF NOT EXISTS system_state (
 		home_id TEXT PRIMARY KEY,
-		armed INTEGER DEFAUL 0
+		armed INTEGER DEFAULT 0
 	)''')
 
 	conn.commit()
@@ -52,7 +52,7 @@ def set_event(home_id, node_id, timestamp, movement, state, is_warning):
 	conn.commit()
 	conn.close()
 
-def set_armed(home_id, armed : bool):
+def set_armed(home_id, armed: bool):
 	conn = start_connection()
 	c = conn.cursor()
 
@@ -60,8 +60,8 @@ def set_armed(home_id, armed : bool):
 	conn.commit()
 	conn.close()
 
-def set_fcm_tokens(user_id, token):
-	conn = start_connection
+def set_fcm_token(user_id, token):
+	conn = start_connection()
 	c = conn.cursor()
 
 	c.execute("INSERT OR REPLACE INTO fcm_tokens VALUES (?,?)", (user_id, token))
@@ -70,12 +70,36 @@ def set_fcm_tokens(user_id, token):
 
 
 # Getters:
-def get_history(home_id, limit = 100):
-	conn = start_connection
+def get_history(home_id, limit=100):
+	conn = start_connection()
 	c = conn.cursor()
 
 	data = c.execute("SELECT * FROM events WHERE home_id=? ORDER BY timestamp DESC LIMIT ?", (home_id, limit)).fetchall()
 	conn.close()
 
 	# noi vrem de fapt o lista cu package-urile din history, care sunt dict ca e mai usor de lucrat cu ele decat cu tuple
-	return [dict(r) for r in rows]
+	return [dict(d) for d in data]
+
+def get_armed(home_id):
+	conn = start_connection()
+	c = conn.cursor()
+
+	row = c.execute("SELECT armed FROM system_state WHERE home_id=?", (home_id,)).fetchone()
+	conn.close()
+
+	if row:
+		return bool(row["armed"])
+	else:
+		return False
+
+def get_fcm_token(user_id):
+	conn = start_connection()
+	c = conn.cursor()
+
+	row = c.execute("SELECT token FROM fcm_tokens WHERE user_id=?", (user_id,)).fetchone()
+	conn.close()
+
+	if row:
+		return row["token"]
+	else:
+		return None
