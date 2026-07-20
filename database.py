@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import uuid
 from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'securifi.db')
@@ -57,8 +58,8 @@ def get_or_create_home(master_mac: str) -> str:
 	if row:
 		home_id = row["home_id"]
 	else:
-		home = str(uuid.uuid4())[:8]
-		c.execute("INSERT INTO homes VALUES (?,?,NULL,0,?)", (home_id, master_mac, datetime.now().isoformat()))
+		home_id = uuid.uuid4().hex[:8]
+		c.execute("INSERT INTO homes (home_id, master_mac, armed, registered_at) VALUES (?, ?, 0, ?)", (home_id, master_mac, datetime.now().isoformat()))
 		conn.commit()
 		print(f"[DB]: New home registered: {home_id} (mac: {master_mac})")
 
@@ -70,11 +71,11 @@ def claim_home(home_id: str, owner_uid: str):
 	conn = start_connection()
 	c = conn.cursor()
 	
-	c.execute("UPDATE home SET owner_uid=? WHERE home_id=?", (owner_uid, home_id))
+	c.execute("UPDATE homes SET owner_uid=? WHERE home_id=? AND owner_uid IS NULL", (owner_uid, home_id))
 	conn.commit()
 	conn.close()
 
-def get_home_by_uid(owner_uid: str):
+def get_home_by_uid(owner_uid: str) -> dict | None:
 	conn = start_connection()
 	c = conn.cursor()
 
@@ -86,7 +87,7 @@ def get_home_by_uid(owner_uid: str):
 	else:
 		return None
 
-def get_home_by_mac(master_mac: str):
+def get_home_by_mac(master_mac: str) -> dict | None:
 	conn = start_connection()
 	c = conn.cursor()
 
@@ -127,11 +128,11 @@ def set_event(home_id: str, node_id: str, timestamp: str, movement: int, state: 
 	c = conn.cursor()
 
 	# la id e null ca sa nu il modificam sa ramana la fel
-	c.execute("INSERT INTO events VALUES (NULL,?,?,?,?,?,?)", (home_id, node_id, timestamp, movement, state, warning_type))
+	c.execute("INSERT INTO events (home_id, node_id, timestamp, movement, state, warning_type) VALUES (?, ?, ?, ?, ?, ?)", (home_id, node_id, timestamp, movement, state, warning_type))
 	conn.commit()
 	conn.close()
 
-def get_history(home_id: str, limit=100):
+def get_history(home_id: str, limit=100) -> list[dict]:
 	conn = start_connection()
 	c = conn.cursor()
 
@@ -143,26 +144,16 @@ def get_history(home_id: str, limit=100):
 
 
 
-
-
-'''
-# Setters:
-
-
-def set_fcm_token(user_id, token):
+# fcm:
+def set_fcm_token(user_id: str, token: str):
 	conn = start_connection()
 	c = conn.cursor()
 
-	c.execute("INSERT OR REPLACE INTO fcm_tokens VALUES (?,?)", (user_id, token))
+	c.execute("INSERT OR REPLACE INTO fcm_tokens (user_id, token) VALUES (?, ?)", (user_id, token))
 	conn.commit()
 	conn.close()
 
-
-# Getters:
-
-
-
-def get_fcm_token(user_id):
+def get_fcm_token(user_id) -> str | None:
 	conn = start_connection()
 	c = conn.cursor()
 
@@ -173,6 +164,3 @@ def get_fcm_token(user_id):
 		return row["token"]
 	else:
 		return None
-
-'''
-
