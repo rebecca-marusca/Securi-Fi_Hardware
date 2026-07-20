@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'securifi.db')
 
@@ -22,7 +23,7 @@ def init_db():
 		timestamp TEXT,
 		movement INTEGER,
 		state TEXT,
-		is_warning INTEGER
+		warning_type TEXT
 	)''')
 
 	# ce tine de users
@@ -32,9 +33,12 @@ def init_db():
 	)''')
 
 	# ce tine de casa ta
-	c.execute('''CREATE TABLE IF NOT EXISTS system_state (
+	c.execute('''CREATE TABLE IF NOT EXISTS homes (
 		home_id TEXT PRIMARY KEY,
-		armed INTEGER DEFAULT 0
+		master_mac TEXT UNIQUE,
+		owner_uid TEXT,
+		armed INTEGER DEFAULT 0,
+		registered_at TEXT
 	)''')
 
 	conn.commit()
@@ -42,23 +46,108 @@ def init_db():
 	print("Database ready :D")
 
 
+
+# homes:
+def get_or_create_home(master_mac: str) -> str:
+	conn = start_connection()
+	c = conn.cursor()
+
+	row = c.execute("SELECT home_id FROM homes WHERE master_mac=?", (master_mac,)).fetchone()
+
+	if row:
+		home_id = row["home_id"]
+	else:
+		home = str(uuid.uuid4())[:8]
+		c.execute("INSERT INTO homes VALUES (?,?,NULL,0,?)", (home_id, master_mac, datetime.now().isoformat()))
+		conn.commit()
+		print(f"[DB]: New home registered: {home_id} (mac: {master_mac})")
+
+	conn.close()
+	return home_id
+
+
+def claim_home(home_id: str, owner_uid: str):
+	conn = start_connection()
+	c = conn.cursor()
+	
+	c.execute("UPDATE home SET owner_uid=? WHERE home_id=?", (owner_uid, home_id))
+	conn.commit()
+	conn.close()
+
+def get_home_by_uid(owner_uid: str):
+	conn = start_connection()
+	c = conn.cursor()
+
+	row = c.execute("SELECT * FROM homes WHERE owner_uid=?", (owner_uid,)).fetchone()
+	conn.close()
+
+	if row:
+		return dict(row)
+	else:
+		return None
+
+def get_home_by_mac(master_mac: str):
+	conn = start_connection()
+	c = conn.cursor()
+
+	row = c.execute("SELECT * FROM homes WHERE master_mac=?", (master_mac,)).fetchone()
+	conn.close()
+
+	if row:
+		return dict(row)
+	else:
+		return None
+
+
+# arming / disarming:
+def set_armed(home_id: str, armed: bool):
+	conn = start_connection()
+	c = conn.cursor()
+
+	c.execute("UPDATE homes SET armed=? WHERE home_id=?", (int(armed), home_id))
+	conn.commit()
+	conn.close()
+
+def get_armed(home_id: str) -> bool:
+	conn = start_connection()
+	c = conn.cursor()
+
+	row = c.execute("SELECT armed FROM homes WHERE home_id=?", (home_id,)).fetchone()
+	conn.close()
+
+	if row:
+		return bool(row["armed"])
+	else:
+		return False
+
+
+# events:
+def set_event(home_id: str, node_id: str, timestamp: str, movement: int, state: str, warning_type: str):
+	conn = start_connection()
+	c = conn.cursor()
+
+	# la id e null ca sa nu il modificam sa ramana la fel
+	c.execute("INSERT INTO events VALUES (NULL,?,?,?,?,?,?)", (home_id, node_id, timestamp, movement, state, warning_type))
+	conn.commit()
+	conn.close()
+
+def get_history(home_id: str, limit=100):
+	conn = start_connection()
+	c = conn.cursor()
+
+	data = c.execute("SELECT * FROM events WHERE home_id=? ORDER BY timestamp DESC LIMIT ?", (home_id, limit)).fetchall()
+	conn.close()
+
+	# noi vrem de fapt o lista cu package-urile din history, care sunt dict ca e mai usor de lucrat cu ele decat cu tuple
+	return [dict(d) for d in data]
+
+
+
+
+
+'''
 # Setters:
-def set_event(home_id, node_id, timestamp, movement, state, is_warning):
-	conn = start_connection()
-	c = conn.cursor()
 
-	# (id, home_id, node_id, timestamp, movement, state, is_warning) -> ca sa nu modificam id e null
-	c.execute("INSERT INTO events VALUES (NULL,?,?,?,?,?,?)", (home_id, node_id, timestamp, movement, state, is_warning))
-	conn.commit()
-	conn.close()
-
-def set_armed(home_id, armed: bool):
-	conn = start_connection()
-	c = conn.cursor()
-
-	c.execute("INSERT OR REPLACE INTO system_state VALUES (?,?)", (home_id, int(armed)))
-	conn.commit()
-	conn.close()
 
 def set_fcm_token(user_id, token):
 	conn = start_connection()
@@ -70,27 +159,8 @@ def set_fcm_token(user_id, token):
 
 
 # Getters:
-def get_history(home_id, limit=100):
-	conn = start_connection()
-	c = conn.cursor()
 
-	data = c.execute("SELECT * FROM events WHERE home_id=? ORDER BY timestamp DESC LIMIT ?", (home_id, limit)).fetchall()
-	conn.close()
 
-	# noi vrem de fapt o lista cu package-urile din history, care sunt dict ca e mai usor de lucrat cu ele decat cu tuple
-	return [dict(d) for d in data]
-
-def get_armed(home_id):
-	conn = start_connection()
-	c = conn.cursor()
-
-	row = c.execute("SELECT armed FROM system_state WHERE home_id=?", (home_id,)).fetchone()
-	conn.close()
-
-	if row:
-		return bool(row["armed"])
-	else:
-		return False
 
 def get_fcm_token(user_id):
 	conn = start_connection()
@@ -103,3 +173,6 @@ def get_fcm_token(user_id):
 		return row["token"]
 	else:
 		return None
+
+'''
+

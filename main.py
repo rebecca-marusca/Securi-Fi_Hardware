@@ -11,3 +11,7 @@ from dateime import datetime
 from models import package
 from database import init_db, set_event, set_armed, set_fcm_token, get_history, get_armed, get_fcm_token
 from notifications import send_fcm
+
+# Setup:
+MQTT_BROKER = "localhost"
+MQTT_PORT = 1883
