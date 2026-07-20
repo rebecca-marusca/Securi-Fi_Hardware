@@ -6,7 +6,7 @@ import json
 import threading
 
 from paho.mqtt.client import mqtt
-from dateime import datetime
+from datetime import datetime
 
 from models import package
 from database import init_db, set_event, set_armed, set_fcm_token, get_history, get_armed, get_fcm_token
