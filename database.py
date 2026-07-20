@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'securi-fi.db')
+DB_PATH = os.path.join(os.path.dirname(__file__), 'securifi.db')
 
 def start_connection():
 	conn = sqlite3.connect(DB_PATH)
