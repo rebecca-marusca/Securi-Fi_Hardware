@@ -22,7 +22,7 @@ class node_reading(BaseModel):
     probability: float
 
     warnings: node_warning
-    sensors: nore+sensors
+    sensors: node_sensors
 
 
 # package: 
@@ -31,8 +31,7 @@ class package(BaseModel):
     timestamp: str
 
     armed: bool
-    is_warning: bool
-    sensor_warning: bool = False
+    intruder_probability: float 
 
+    warning_type: Optional[str] = None 
     nodes: List[node_reading]
-    sensor_type: Optional[str] = None
