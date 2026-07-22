@@ -63,7 +63,7 @@ def onboard_home(uid: str, master_mac: str) -> str:
         home_id = existing[0].id
         db.collection("homes").document(home_id).update({"owner_uid": uid})
     else:
-        home_id = uuid.uuid4.hex[:8]
+        home_id = uuid.uuid4().hex[:8]
         db.collection("homes").document(home_id).set({
             "master_mac": master_mac,
             "owner_uid": uid,
@@ -102,11 +102,11 @@ def get_home_by_uid(uid: str) -> dict | None:
     home = db.collection("homes").document(home_id).get()
     if home.exists:
         return {
-            "home_id": home_id
+            "home_id": home_id,
             **home.to_dict()
         }
     else:
-        None
+        return None
 
 def update_last_seen(home_id: str):
     db.collection("homes").document(home_id).update({"last_seen": datetime.now().isoformat()})
@@ -118,7 +118,7 @@ def set_armed(home_id: str, armed: bool):
 
 def get_armed(home_id: str) -> bool:
     doc = db.collection("homes").document(home_id).get()
-    if doc:
+    if doc.exists:
         return doc.to_dict().get("armed", False)
     else:
         return None
@@ -164,4 +164,17 @@ def analyse_cache(packages: list) -> bool:
     return (motion_count >= PACKAGE_COUNT_THRESHOLD)
 
 
-    
+# session (adica un break in salvat):
+def start_session(home_id: str, package: dict) -> str:
+    session_id = uuid.uuid4().hex[:8]
+    db.collection("events").document(home_id).collection("sessions").document(session_id).set({
+        "started_at": datetime.now().isoformat(),
+        "ended_at": None,
+        "peak_probability": package.get("intruder_probability", 0),
+        "trigger_package": package,
+        "dismissed_by_user": False,
+        "snapshot_pdf": None
+    })
+
+    print(f"[DB]: Session started: {session_id} for home: {home_id}")
+    return session_id
