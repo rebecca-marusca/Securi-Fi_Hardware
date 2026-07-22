@@ -30,3 +30,8 @@ def create_user_profile(uid: str, email: str, phone: str):
 
     print(f"[DB]: User profile created: {uid}")
 
+def get_user():
+    pass
+
+def set_fcm_token():
+    pass
