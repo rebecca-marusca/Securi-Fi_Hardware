@@ -27,7 +27,7 @@ class node_reading(BaseModel):
 
 # package: 
 class package(BaseModel):
-    home_id: str
+    master_mac: str
     timestamp: str
 
     armed: bool
