@@ -178,3 +178,74 @@ def start_session(home_id: str, package: dict) -> str:
 
     print(f"[DB]: Session started: {session_id} for home: {home_id}")
     return session_id
+
+def add_package_to_session(home_id: str, session_id: str, package: dict):
+    db.collection("events").document(home_id).collection("sessions").document(session_id).collection("packages").add(package)
+
+    session_ref = db.collection("events").document(home_id).collection("sessions").document(session_id)
+    current = session_ref.get()
+
+    if current.exists:
+        current_peak = current.to_dict().get("peak_probability", 0)
+        new_prob = package.get("intruder_probability", 0)
+
+        if new_prob > current_peak:
+            session_ref.update({"peak_probability": new_prob})
+
+def close_session(home_id: str, session_id: str):
+    db.collection("events").document(home_id).collection("sessions").document(session_id).update({"ended_at": datetime.now().isoformat()})
+
+    print(f"[DB]: Session {session_id}, in home {home_id}, was closed")
+
+# cand o opreste user-ul
+def dismiss_session(home_id: str, session_id: str):
+    db.collection("events").document(home_id).collection("sessions").document(session_id).update({
+        "ended_at": datetime.now().isocalendar(),
+        "dismissed_by_user": True
+    })
+
+    print(f"[DB]: Session {session_id}, in home {home_id}, was dismissed by the user")
+
+# ca sa afisam lista de evenimente pe aplicatie
+def get_sessions(home_id: str, limit: int = 20) -> list:
+    docs = db.collection("events").document(home_id).collection("sessions").order_by("starting_at", direction=firestore.Query.DESCENDING).limit(limit).get()
+
+    return_list = [None for i in range(limit)]
+    for d in db:
+        return_list.append({
+            "session_id": d.id,
+            **d.to_dict()
+        })
+
+    return return_list
+
+def get_session_packages(home_id: str, session_id: str) -> list:
+    docs = db.collection("events").document(home_id).collection("sessions").document(session_id).order_by("timestamp").get()
+
+    return_list = [None for i in range(len(docs))]
+    for d in docs:
+        return_list.append(d.to__dict())
+
+    return return_list
+
+# ca user-ul sa salveze cache-ul curent ca si o sesiune care sa ramana
+def save_snapshot(home_id: str, packages: list) -> str:
+    session_id = uuid.uuid4().hex[:8]
+
+    db.collection("events").document(home_id).collection("sessions").document(session_id).set({
+        "started_at": packages[0].get("timestamp") if packages else datetime.now().isoformat(),
+        "ended_at": datetime.now().isoformat(),
+        "peak_probability": max((p.get("intruder_probability", 0) for p in packages), default=0),
+        "trigger_package": None,
+        "dismissed_by_user": False,
+        "snapshot_pdf": None,
+        "is_manual_snapshot": True
+    })
+
+    session_packages_ref = db.collection("events").document(home_id).collection("sessions").document(session_id).collection("packages")
+    for pkg in packages:
+        session_packages_ref.add(pkg)
+
+    print(f"[DB]: Manual snapshot saved: {session_id} at the home {home_id}")
+    return session_id
+
