@@ -103,7 +103,7 @@ class TrafficGenerator:
 
                 try:
                     packet = self._build_icmp_packet()
-                    self.sendto(packet, (self._target_ip, 1))
+                    sock.sendto(packet, (self._target_ip, 1))
                     self._packets_sent += 1
                     self._sequence = (self._sequence + 1) & 0xFFFF # ca sa il itna in 16 bit valid range
                 except OSError:
@@ -112,7 +112,8 @@ class TrafficGenerator:
 
                     self._packets_dropped += 1
                     try:
-                        sock.close()
+                        if sock:
+                            sock.close()
                         sock = self._open_socket()
                     except OSError:
                         pass
@@ -125,59 +126,75 @@ class TrafficGenerator:
         finally: 
             if sock:
                 try:
-                    sock.close()
+                        sock.close()
                 except OSError:
                     pass
             self._running = False
 
 
 # internal helpers:
-def _open_socket(self):
-    """
-        Open a raw ICMP socket.
- 
-        SOCK_RAW with IPPROTO_ICMP requires no bind, we just sendto
-        the target address. MicroPython's socket module supports this
-        on ESP32 with the right network config.
-    """
+    def _open_socket(self) -> socket.socket:
+        """
+            Open a raw ICMP socket.
+    
+            SOCK_RAW with IPPROTO_ICMP requires no bind, we just sendto
+            the target address. MicroPython's socket module supports this
+            on ESP32 with the right network config.
+        """
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, 1) # 1 = IPPROTO_ICMP
-    sock.setblocking(False)
-    sock.settimeout(0.1)
-    return sock
+        sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, 1) # 1 = IPPROTO_ICMP
+        sock.setblocking(False)
+        sock.settimeout(0.1)
+        return sock
 
-def _build_icmp_packet(self) -> bytes:
-    """
-        Build a minimal ICMP echo request packet.
- 
-        Structure (8 bytes header + 16 bytes payload = 24 bytes total):
-            Type (1B) | Code (1B) | Checksum (2B) | ID (2B) | Seq (2B) | Payload (16B)
- 
-        Payload is a fixed pattern — content does not matter for CSI generation,
-        only the packet length and timing matter.
-    """
+    def _build_icmp_packet(self) -> bytes:
+        """
+            Build a minimal ICMP echo request packet.
+    
+            Structure (8 bytes header + 16 bytes payload = 24 bytes total):
+                Type (1B) | Code (1B) | Checksum (2B) | ID (2B) | Seq (2B) | Payload (16B)
+    
+            Payload is a fixed pattern — content does not matter for CSI generation,
+            only the packet length and timing matter.
+        """
 
-    header = struct.pack(
-        "!BBHHH",
-        _ICMP_ECHO_REQUEST, # type 8
-        _ICMP_CODE, # code 0
-        0,                   # checksum placeholder
-        self._identifier,    # identifier
-        self._sequence,      # sequence number
-    )    
-    payload = b"SecuriFi-Ping!!!"
+        header = struct.pack(
+            "!BBHHH",
+            _ICMP_ECHO_REQUEST, # type 8
+            _ICMP_CODE, # code 0
+            0,                   # checksum placeholder
+            self._identifier,    # identifier
+            self._sequence,      # sequence number
+        )    
+        payload = b"SecuriFi-Ping!!!"
 
-    checksum = self._checksum(header + payload)
+        checksum = self._checksum(header + payload)
 
-     # Rebuild header with real checksum.
-    header = struct.pack(
-        "!BBHHH",
-        _ICMP_ECHO_REQUEST,
-        _ICMP_CODE,
-        checksum,
-        self._identifier,
-        self._sequence,
-    )
+        # Rebuild header with real checksum.
+        header = struct.pack(
+            "!BBHHH",
+            _ICMP_ECHO_REQUEST,
+            _ICMP_CODE,
+            checksum,
+            self._identifier,
+            self._sequence,
+        )
 
-    return header + payload
+        return header + payload
 
+
+    # Internet checksum algorithm RFC1071, cred ca suntem la fel de confuzi
+    @staticmethod
+    def _checksum(data: bytes) -> int:
+        s = 0 
+        n = len(data)
+
+        for i in range(0, n - 1, 2):
+            s += (data[i] << 8) + data[i + 1]
+        if n % 2:
+            s += (data[-1] << 8)
+
+        while s >> 16:
+            s = (s & 0xFFFF) + (s >> 16)
+
+        return ~s & 0xFFFF
