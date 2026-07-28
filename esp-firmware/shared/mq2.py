@@ -1,3 +1,4 @@
+# cand e eroare la import-uri, ignorati-le ca apar pt ca sunteti in python env si nu micro python
 import time 
 
 WARMUP_SECONDS = 30
