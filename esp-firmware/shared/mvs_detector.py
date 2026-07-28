@@ -1,4 +1,4 @@
-# layer 4, partea de motion detection math, stripped down din especture
+# layer 3 + 4, partea de motion detection math, stripped down din especture
 # core 0 - partea de mq2, esp now, mqtt, watchdog
 # core 1 - partea de csi traffic generator & mvs detection
 
