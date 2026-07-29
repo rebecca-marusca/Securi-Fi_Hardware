@@ -1,8 +1,7 @@
 import asyncio
 import json
-import time
 
-from  shared.securifi_node import SecuriFiNode, NodeReading
+from  shared.securifi_node import SecuriFiNode
 from config import MASTER_MAC, ESPNOW_TX_INTERVAL_MS, ESPNOW_CHANNEL, ESPNOW_MAX_RETRIES
 
 
@@ -11,6 +10,7 @@ class SlaveNode(SecuriFiNode):
         super().__init__(node_id=node_id, wifi_ssid=wifi_ssid, wifi_password=wifi_password, mq2_pin=mq2_pin, mq2_threshold=mq2_threshold, traffic_rate_pps=traffic_rate_pps)
 
         self._master_mac = master_mac
+        self._master_mac_bytes = self._parse_mac(self._master_mac) if master_mac else None
         self._espnow = None
 
         self._tx_success = 0
@@ -29,8 +29,9 @@ class SlaveNode(SecuriFiNode):
             self._espnow = espnow.ESPNow()
             self._espnow.active(True)
 
-            master_mac_bytes = self._parse_mac(self._master_mac)
-            self._espnow.add_peer(master_mac_bytes, channel=ESPNOW_CHANNEL)
+            if self._master_mac_bytes is None:
+                raise RuntimeError("MASTER_MAC not set in config")
+            self._espnow.add_peer(self._master_mac_bytes, channel=ESPNOW_CHANNEL)
 
             print(f"[{self._node_id}]: ESP-NOW initialized, master peer: {self._master_mac}")
         except ImportError:
@@ -58,11 +59,9 @@ class SlaveNode(SecuriFiNode):
         if self._espnow is None:
             return
 
-        master_mac_bytes = self._parse_mac(self._master_mac)
-
         for attempt in range(ESPNOW_MAX_RETRIES):
             try:
-                success = self._espnow.send(master_mac_bytes, payload)
+                success = self._espnow.send(self._master_mac_bytes, payload)
                 if success:
                     self._tx_success += 1
                     return
@@ -74,7 +73,7 @@ class SlaveNode(SecuriFiNode):
         self._tx_failed += 1
 
 
-    def _build_payload(self, reading: NodeReading) -> bytes:
+    def _build_payload(self, reading) -> bytes:
         data = {
             "id": reading.node_id,
             "ts": reading.timestamp,
@@ -86,3 +85,10 @@ class SlaveNode(SecuriFiNode):
         }
 
         return json.dumps(data).encode("utf-8") # dict -> str -> bytes ca esp-now poate transmite numai bytes
+
+
+    # helper:
+    @staticmethod
+    def _parse_mac(mac_str: str) -> bytes:
+        parts = mac_str.strip().split(":")
+        return bytes(int(p, 16) for p in parts)
