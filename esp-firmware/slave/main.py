@@ -1,8 +1,6 @@
 import time
 import sys
 
-sys.path.insert(0, '../shared')
-
 def read_node_id() -> str:
     try:
         with open("node_id.txt", "r") as f:

@@ -15,7 +15,7 @@ def read_node_id() -> str:
 
 
 def boot() -> None:
-    from config import WIFI_PASSWORD, WIFI_SSID, SLAVE_MACS, MQ2_PIN, MQ2_THRESHOLD, TRAFFIC_RATE_PPS
+    from config import WIFI_PASSWORD, WIFI_SSID, SLAVE_MACS, TRAFFIC_RATE_PPS
     from master_node import MasterNode
 
     node_id = read_node_id()
