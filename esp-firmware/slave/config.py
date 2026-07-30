@@ -2,10 +2,11 @@
 WIFI_SSID = "SecuriFi-Hub"
 WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07"
 
-MASTER_MAC = None # TODO
+# MASTER_MAC = None # TODO pe partea de home setup
+MASTER_MAC = None # pt MVP1 hardcodat inainte de flash
 
-MQ2_PIN = None # TODO
-MQ2_THRESHOLD = None # TODO
+# MQ2_PIN = None # TODO
+# MQ2_THRESHOLD = None # TODO
 
 # traffic generator
 TRAFFIC_RATE_PPS = 20

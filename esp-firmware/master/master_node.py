@@ -38,7 +38,7 @@ class MasterNode(SecuriFiNode):
         return [
             self._loop_espnow_rx(),
             self._loop_mqtt_publish(),
-            self._loop_mqtt_commands()
+            # self._loop_mqtt_commands()
         ]
 
     def _init_espnow(self) -> None:
@@ -165,88 +165,106 @@ class MasterNode(SecuriFiNode):
 
     # package builder
     def _build_package(self, own_reading: NodeReading) -> dict:
+        #MVP packaegs:
         now_ms = time.ticks_ms()
-        nodes = []
-        probabilities = []
-
-        own_prob = self._movement_to_probability(own_reading.movement_pct)
-        probabilities.append(own_prob)
-        nodes.append({
-            "node_id": self._node_id,
-            "role": "master",
-            "state": own_reading.state,
-            "movement_pct": own_reading.movement_pct,
-            "probability": own_prob,
-            "warnings": {
-                "low_battery": False,
-                "not_transmitting": False,
-                "signal_weak": False
-            },
-            "sensors":{
-                "flame": False, # TODO
-                "gas": own_reading.gas_detected
-            }
-        })
+        readings = {"master": own_reading.movement_pct}
 
         for mac_bytes, state in self._slave_states.items():
             elapsed_ms = time.ticks_diff(now_ms, state.last_seen_ms)
             not_transmitting = (state.last_seen_ms == 0 or elapsed_ms > SLAVE_TIMEOUT_MS)
 
             if not_transmitting or state.reading is None:
-                nodes.append({
-                    "node_id": state.node_id,
-                    "role": "slave",
-                    "state": "IDLE",
-                    "movement_pct": 0,
-                    "probability": 0.0,
-                    "warnings": {
-                        "low_battery": False, # TODO
-                        "not_transmitting": True,
-                        "signal_weak": False # TODO
-                    },
-                    "sensors":{
-                        "flame": False, # TODO
-                        "gas": False
-                    }
-                })
+                readings[state.node_id] = 0
             else:
-                r = state.reading
-                prob = self._movement_to_probability(r.get("mvt", 0))
-                probabilities.append(prob)
-                nodes.append({
-                    "node_id": state.node_id,
-                    "role": "slave",
-                    "state": r.get("st", "IDLE"),
-                    "movement_pct": r.get("mvt", 0),
-                    "probability": prob,
-                    "warnings": {
-                        "low_battery": False, # TODO
-                        "not_transmitting": False,
-                        "signal_weak": False # TODO
-                    },
-                    "sensors":{
-                        "flame": False, # TODO
-                        "gas": r.get("gas", False)
-                    }
-                })
-
-        intruder_probability = (sum(probabilities) / len(probabilities) if probabilities else 0.0)
-        gas_detected = any(n["sensors"]["gas"] for n in nodes)
-        if gas_detected:
-            warning_type = "gas"
-        elif intruder_probability >= DETECTION_PROBABILITY_THRESHOLD:
-            warning_type = "intruder"
-        else:
-            warning_type = None
+                readings[state.node_id] = state.reading.get("mvt", 0)
 
         return {
-            "master_mac": self._own_mac or "00:00:00:00:00:00",
             "timestamp": str(time.time()),
-            "armed": self._armed,
-            "intruder_probability": round(intruder_probability, 4),
-            "warning_type": warning_type,
-            "nodes": nodes
-        }
+            "readings": readings
+        } 
+
+        # now_ms = time.ticks_ms()
+        # nodes = []
+        # probabilities = []
+
+        # own_prob = self._movement_to_probability(own_reading.movement_pct)
+        # probabilities.append(own_prob)
+        # nodes.append({
+        #     "node_id": self._node_id,
+        #     "role": "master",
+        #     "state": own_reading.state,
+        #     "movement_pct": own_reading.movement_pct,
+        #     "probability": own_prob,
+        #     "warnings": {
+        #         "low_battery": False,
+        #         "not_transmitting": False,
+        #         "signal_weak": False
+        #     },
+        #     "sensors":{
+        #         "flame": False, # TODO
+        #         "gas": own_reading.gas_detected
+        #     }
+        # })
+
+        # for mac_bytes, state in self._slave_states.items():
+        #     elapsed_ms = time.ticks_diff(now_ms, state.last_seen_ms)
+        #     not_transmitting = (state.last_seen_ms == 0 or elapsed_ms > SLAVE_TIMEOUT_MS)
+
+        #     if not_transmitting or state.reading is None:
+        #         nodes.append({
+        #             "node_id": state.node_id,
+        #             "role": "slave",
+        #             "state": "IDLE",
+        #             "movement_pct": 0,
+        #             "probability": 0.0,
+        #             "warnings": {
+        #                 "low_battery": False, # TODO
+        #                 "not_transmitting": True,
+        #                 "signal_weak": False # TODO
+        #             },
+        #             "sensors":{
+        #                 "flame": False, # TODO
+        #                 "gas": False
+        #             }
+        #         })
+        #     else:
+        #         r = state.reading
+        #         prob = self._movement_to_probability(r.get("mvt", 0))
+        #         probabilities.append(prob)
+        #         nodes.append({
+        #             "node_id": state.node_id,
+        #             "role": "slave",
+        #             "state": r.get("st", "IDLE"),
+        #             "movement_pct": r.get("mvt", 0),
+        #             "probability": prob,
+        #             "warnings": {
+        #                 "low_battery": False, # TODO
+        #                 "not_transmitting": False,
+        #                 "signal_weak": False # TODO
+        #             },
+        #             "sensors":{
+        #                 "flame": False, # TODO
+        #                 "gas": r.get("gas", False)
+        #             }
+        #         })
+
+        # intruder_probability = (sum(probabilities) / len(probabilities) if probabilities else 0.0)
+        # gas_detected = any(n["sensors"]["gas"] for n in nodes)
+        # if gas_detected:
+        #     warning_type = "gas"
+        # elif intruder_probability >= DETECTION_PROBABILITY_THRESHOLD:
+        #     warning_type = "intruder"
+        # else:
+        #     warning_type = None
+
+        # return {
+        #     "master_mac": self._own_mac or "00:00:00:00:00:00",
+        #     "timestamp": str(time.time()),
+        #     "armed": self._armed,
+        #     "intruder_probability": round(intruder_probability, 4),
+        #     "warning_type": warning_type,
+        #     "nodes": nodes
+        # }
 
     # internal helpers:
     @staticmethod

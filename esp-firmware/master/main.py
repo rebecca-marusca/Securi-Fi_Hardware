@@ -21,7 +21,7 @@ def boot() -> None:
     node_id = read_node_id()
     print(f"[boot] Starting as {node_id}")
 
-    node = MasterNode(node_id=node_id, wifi_ssid=WIFI_SSID, wifi_password=WIFI_PASSWORD, slave_macs=SLAVE_MACS, mq2_pin=MQ2_PIN, mq2_threshold=MQ2_THRESHOLD, traffic_rate_pps=TRAFFIC_RATE_PPS)
+    node = MasterNode(node_id=node_id, wifi_ssid=WIFI_SSID, wifi_password=WIFI_PASSWORD, slave_macs=SLAVE_MACS, traffic_rate_pps=TRAFFIC_RATE_PPS)
 
     node.start()
 
@@ -34,5 +34,3 @@ except Exception as e:
     time.sleep(5)
     import machine
     machine.reset()
-
-# branch test

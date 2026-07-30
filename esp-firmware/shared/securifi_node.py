@@ -77,7 +77,7 @@ class SecuriFiNode:
         self._boot_time: float = time.time()
 
         self._running = False
-        self._mq2.start_warmup()
+        # self._mq2.start_warmup()
 
 
     # Outside functions:
@@ -128,14 +128,14 @@ class SecuriFiNode:
         while self._running:
             if self._detector.is_calibrated:
                 movement_pct, state = self._detector.get_reading()
-                mq2_reading = self._mq2.read()
+                # mq2_reading = self._mq2.read()
 
                 self._current_reading = NodeReading(
                     node_id=self._node_id,
                     timestamp=int(time.time()),
                     movement_pct=movement_pct,
                     state=state,
-                    gas_detected=mq2_reading.gas_detected,
+                    gas_detected=False, #mq2_reading.gas_detected,
                     is_calibrated=True,
                     packets_sent=self._traffic_gen.packets_sent if self._traffic_gen else 0,
                     packets_dropped=self._traffic_gen.packets_dropped if self._traffic_gen else 0,
