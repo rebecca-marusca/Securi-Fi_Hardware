@@ -3,7 +3,7 @@ WIFI_SSID = "SecuriFi-Hub"
 WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07"
 
 # MASTER_MAC = None # TODO pe partea de home setup
-MASTER_MAC = None # pt MVP1 hardcodat inainte de flash
+MASTER_MAC = "58:E6:C5:12:04:C8" # pt MVP1 hardcodat inainte de flash
 
 # MQ2_PIN = None # TODO
 # MQ2_THRESHOLD = None # TODO
