@@ -62,7 +62,7 @@ class MasterNode(SecuriFiNode):
                 continue
 
             try:
-                result = self._espnow.recv(timeout=0)
+                result = self._espnow.recv(0)
                 if result is not None:
                     mac, data = result
                     self._handle_slave_packet(mac, data)
