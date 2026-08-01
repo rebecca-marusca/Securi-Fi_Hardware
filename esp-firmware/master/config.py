@@ -3,7 +3,7 @@ WIFI_SSID = "SecuriFi-Hub"
 WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07"
 
 # mqtt:
-MQTT_BROKER = None # TODO
+MQTT_BROKER = "192.168.1.50" # TODO
 MQTT_PORT = 1883
 
 MQTT_USERNAME = ""
