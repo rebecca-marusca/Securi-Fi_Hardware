@@ -6,10 +6,10 @@ import _thread
 import network 
 import time 
 
-from mvs_detector import MVSDetector
-from traffic_generator import TrafficGenerator
-from csi_capture import CSICapture
-from mq2 import MQ2Sensor
+from .mvs_detector import MVSDetector
+from .traffic_generator import TrafficGenerator
+from .csi_capture import CSICapture
+from .mq2 import MQ2Sensor
 
 
 WIFI_TIMEOUT_SECONDS = 20
