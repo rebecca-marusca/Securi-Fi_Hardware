@@ -8,7 +8,7 @@
  
 # Number of CSI subcarriers the C6 exposes on 2.4 GHz HT20.
 # 52 data + 4 pilot = 56 total, but ESPectre uses 52 data subcarriers.
-NUM_SUBCARRIERS = 52
+NUM_SUBCARRIERS = 32
  
 # Sliding window size for variance computation.
 # Larger = smoother but slower to react. 30 is ESPectre default.
