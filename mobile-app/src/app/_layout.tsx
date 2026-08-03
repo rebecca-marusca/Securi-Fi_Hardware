@@ -2,12 +2,18 @@ import { SplashOverlay } from "@/components/splash-overlay";
 import { AlertProvider, useActiveAlert } from "@/contexts/AlertContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Redirect, Slot } from "expo-router";
+import { useFonts } from "expo-font";
 
 function RootNavigation() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { activeAlert, isLoading: alertLoading } = useActiveAlert();
+  const [fontsLoaded] = useFonts({
+    "Urbanist-Regular": require("../../assets/fonts/Urbanist-Regular.ttf"),
+    "Urbanist-Bold": require("../../assets/fonts/Urbanist-Bold.ttf"),
+    "Urbanist-SemiBold": require("../../assets/fonts/Urbanist-SemiBold.ttf"),
+  })
 
-  if (authLoading || alertLoading) {
+  if (authLoading || alertLoading || !fontsLoaded) {
     return <SplashOverlay />;
   }
 
