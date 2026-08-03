@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
     View,
     Text,
@@ -13,6 +13,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { colors } from '@/theme/colors';
+import BottomSheet from '@gorhom/bottom-sheet';
+import { ForgotPasswordSheet } from '@/components/ForgotPasswordSheet';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
@@ -20,6 +22,7 @@ export default function LoginScreen() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { signIn } = useAuth();
     const router = useRouter();
+    const bottomSheetRef = useRef<BottomSheet>(null);
 
     const handleLogin = async () => {
         if(!email || !password) {
@@ -38,7 +41,17 @@ export default function LoginScreen() {
         }
     };
 
+    const openForgotPassword = () => {
+      console.log('Forgot password pressed')
+      bottomSheetRef.current?.expand();
+    };
+
+    const closeForgotPassword = () => {
+      bottomSheetRef.current?.close();
+    };
+
     return (
+      <>
         <KeyboardAvoidingView  style = {styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <Image
                 source = {require('../../../assets/images/securi-fi-text-dark.png')}
@@ -74,7 +87,7 @@ export default function LoginScreen() {
                 </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => {/* TODO: bottom sheet */}}>
+            <TouchableOpacity onPress={openForgotPassword}>
                 <Text style={styles.link}>Forgot Password? </Text>
             </TouchableOpacity>
 
@@ -88,6 +101,9 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
         </KeyboardAvoidingView>
+
+        <ForgotPasswordSheet ref={bottomSheetRef} onClose={closeForgotPassword} />
+      </>
     )
 }
 
