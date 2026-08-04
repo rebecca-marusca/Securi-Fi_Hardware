@@ -1,8 +1,17 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import {
+  getAuth,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  sendPasswordResetEmail,
+} from '@react-native-firebase/auth';
+
+type AuthUser = ReturnType<typeof getAuth>['currentUser'];
 
 type AuthContextType = {
-  user: FirebaseAuthTypes.User | null;
+  user: AuthUser;
   isAuthenticated: boolean;
   isLoading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
@@ -22,34 +31,33 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
+  const [user, setUser] = useState<AuthUser>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // onAuthStateChanged fires immediately with the current state,
-    // then again every time the user logs in or out.
-    const unsubscribe = auth().onAuthStateChanged((firebaseUser) => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setIsLoading(false);
     });
 
-    return unsubscribe; // cleanup listener when component unmounts
+    return unsubscribe;
   }, []);
 
   const signUp = async (email: string, password: string) => {
-    await auth().createUserWithEmailAndPassword(email, password);
+    await createUserWithEmailAndPassword(getAuth(), email, password);
   };
 
   const signIn = async (email: string, password: string) => {
-    await auth().signInWithEmailAndPassword(email, password);
+    await signInWithEmailAndPassword(getAuth(), email, password);
   };
 
   const signOut = async () => {
-    await auth().signOut();
+    await firebaseSignOut(getAuth());
   };
 
   const resetPassword = async (email: string) => {
-    await auth().sendPasswordResetEmail(email);
+    await sendPasswordResetEmail(getAuth(), email);
   };
 
   return (

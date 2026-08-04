@@ -14,6 +14,9 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { colors } from '@/theme/colors';
+import { getAuth } from '@react-native-firebase/auth';
+import { getFirestore, doc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
+
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
@@ -43,17 +46,21 @@ export default function SignupScreen() {
     setIsSubmitting(true);
     try {
       await signUp(email, password);
-      // TODO: once signed up, save phoneNumber to Firestore under the new user's UID
-      // (auth() alone doesn't store phone number — that needs a separate DB write)
 
-      // No manual navigation needed — root _layout.tsx will
-      // detect the auth state change and redirect automatically.
+      const currentUser = getAuth().currentUser;
+      if (currentUser) {
+        await setDoc(doc(getFirestore(), 'users', currentUser.uid), {
+          email,
+          phoneNumber,
+          createdAt: serverTimestamp(),
+        });
+      }
     } catch (error: any) {
       const message = getFirebaseErrorMessage(error.code);
       Alert.alert('Signup failed', message);
     } finally {
       setIsSubmitting(false);
-    }
+}
   };
 
   return (
