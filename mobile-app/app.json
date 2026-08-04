@@ -26,6 +26,14 @@
     "plugins": [
       "expo-router",
       [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#557473",
@@ -36,7 +44,8 @@
       "expo-font",
       "expo-image",
       "expo-status-bar",
-      "@react-native-firebase/app"
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth"
     ],
     "experiments": {
       "typedRoutes": true,
