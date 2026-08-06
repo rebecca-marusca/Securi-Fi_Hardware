@@ -26,7 +26,6 @@ export async function updateUserProfile(
   await setDoc(doc(getFirestore(), 'users', uid), data, { merge: true });
 }
 
-
 export function subscribeToUserProfile(
     uid: string,
     onChange: (profile: UserProfile | null) => void

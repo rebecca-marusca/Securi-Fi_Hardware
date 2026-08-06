@@ -56,6 +56,7 @@ export default function SignupScreen() {
         });
       }
     } catch (error: any) {
+      console.log('SIGNUP ERROR:', error); // temporary debug line
       const message = getFirebaseErrorMessage(error.code);
       Alert.alert('Signup failed', message);
     } finally {

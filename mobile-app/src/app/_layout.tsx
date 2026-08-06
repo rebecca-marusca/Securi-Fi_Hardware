@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Redirect, Slot } from "expo-router";
 import { useFonts } from "expo-font";
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
-import { Alert } from "react-native";
+
 
 function RootNavigation() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -49,3 +49,10 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+// const styles = StyleSheet.create({
+//   symbol: {
+//     tintColor: colors.darkGreen,
+//     size: 20
+//   },
+// });
