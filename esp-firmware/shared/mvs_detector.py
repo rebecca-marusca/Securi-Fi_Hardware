@@ -2,55 +2,19 @@
 # core 0 - partea de mq2, esp now, mqtt, watchdog
 # core 1 - partea de csi traffic generator & mvs detection
 
-# ---------------------------------------------------------------------------
-# Constants — tuned for ESP32-C6 + indoor single-room detection
-# ---------------------------------------------------------------------------
- 
-# Number of CSI subcarriers the C6 exposes on 2.4 GHz HT20.
-# 52 data + 4 pilot = 56 total, but ESPectre uses 52 data subcarriers.
+# 52 data + 4 pilot = 56 total, but ESPectre uses 52 data subcarriers
 NUM_SUBCARRIERS = 52
  
-# Sliding window size for variance computation.
-# Larger = smoother but slower to react. 30 is ESPectre default.
-WINDOW_SIZE = 30
- 
-# How many packets to collect during gain lock calibration.
-# Original ESPectre uses 300 — at 20pps that is 15 seconds of blocking startup.
-# 100 packets (5 seconds) is sufficient for a stable indoor baseline.
-GAIN_LOCK_PACKETS = 100
- 
-# Multiplier applied to the calibrated baseline variance to set the
-# detection threshold. Higher = less sensitive, fewer false positives.
-# 1.8 matches ESPectre default sensitivity for a living-room sized space.
-THRESHOLD_MULTIPLIER = 1.8
- 
-# Movement percentage at which state flips from IDLE to MOTION.
-# 100% means movement == threshold exactly. Kept at 100 intentionally —
-# the threshold_multiplier above is where you tune sensitivity, not here.
-MOTION_TRIGGER_PCT = 100
+WINDOW_SIZE = 30 # TODO
 
+GAIN_LOCK_PACKETS = 100 # TODO
+ 
+THRESHOLD_MULTIPLIER = 1.8 # TODO
+ 
+MOTION_TRIGGER_PCT = 100 # TODO
 
 
 class MVSDetector:
-    """
-    Moving Variance Segmentation detector
- 
-    Lifecycle:
-        detector = MVSDetector()
-        detector.feed(csi_amplitudes)   # call once per received CSI packet
-        ...repeat during gain lock (detector.is_calibrated stays False)...
-        ...once calibrated, feed() continues and reading becomes valid...
-        reading = detector.get_reading()  # returns (movement_pct, state)
- 
-    Thread safety:
-        feed() is called from the CSI capture callback on Core 1.
-        get_reading() is called from the asyncio loop on Core 0.
-        A simple lock is used around the shared state (_movement, _state).
-        MicroPython's _thread.allocate_lock() is used — import handled
-        by the caller environment. To keep this file importable in tests
-        outside MicroPython, the lock degrades gracefully to a no-op.
-    """
-
     def __init__(self):
         self._window: list = []
 
@@ -133,20 +97,6 @@ class MVSDetector:
             self._state = state
 
     def get_reading(self) -> tuple:
-        """
-        Return the latest detection result.
- 
-        Returns:
-            (movement_pct: int, state: str)
-            movement_pct is (movement / threshold) * 100.
-                0–99   → IDLE
-                100+   → MOTION (capped display at 200 by convention)
-            state is "MOTION" or "IDLE".
- 
-        Returns (0, "IDLE") if not yet calibrated.
-        Safe to call from any thread.
-        """
-
         if not self._calibrated:
             return (0, "IDLE")
 
@@ -163,11 +113,6 @@ class MVSDetector:
         return (movement_pct, state)
 
     def reset(self) -> None:
-        """
-        Full reset — clears calibration and window. Use when rebooting
-        or when the environment has changed significantly (e.g. furniture moved).
-        Node will go through gain lock again on next packet feed.
-        """
         with self._lock:
             self._window = []
 
@@ -187,13 +132,6 @@ class MVSDetector:
     def _compute_variance_sum(self) -> float:
         """
         Compute the sum of per-subcarrier variances across the current window.
- 
-        For each of the NUM_SUBCARRIERS subcarriers:
-            1. Collect the amplitude value from each window frame.
-            2. Compute mean across frames.
-            3. Compute variance = mean of squared deviations from mean.
-        Sum all subcarrier variances into one scalar.
- 
         This is the core MVS operation. Called once per incoming packet
         once the window is full.
  

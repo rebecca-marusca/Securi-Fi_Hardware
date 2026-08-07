@@ -1,6 +1,6 @@
 # wifi:
-WIFI_SSID = "SecuriFi-Hub"
-WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07"
+WIFI_SSID = None # TODO
+WIFI_PASSWORD = None # TODO
 
 # mqtt:
 MQTT_BROKER = None # TODO

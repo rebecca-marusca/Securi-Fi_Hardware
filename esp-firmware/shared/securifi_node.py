@@ -59,7 +59,7 @@ class NodeReading:
 
 
 class SecuriFiNode:
-    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, mq2_pin: int = 2, mq2_threshold: int = 1500, traffic_rate_pps: int = 20):
+    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, mq2_pin: int = 2, mq2_threshold: int = 1500, traffic_rate_pps: int = 20): # TODO sa scoatem / modificam valorile hardcodate pt mq2 pin & threshold 
         self._node_id = node_id
         self._wifi_ssid = wifi_ssid
         self._wifi_password = wifi_password
