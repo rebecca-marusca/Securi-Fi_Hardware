@@ -23,7 +23,7 @@ export function SplashOverlay() {
   const image = (
     <Image
       style={styles.image}
-      source={require("@/assets/images/securi-fi-text-light.png")}
+      source={require("@/assets/images/securi-fi-text-lightGreen.png")}
     />
   );
 

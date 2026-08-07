@@ -1,14 +1,20 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import {
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
   getAuth,
   onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
   sendPasswordResetEmail,
-} from '@react-native-firebase/auth';
+  signInWithEmailAndPassword,
+} from "@react-native-firebase/auth";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
-type AuthUser = ReturnType<typeof getAuth>['currentUser'];
+type AuthUser = ReturnType<typeof getAuth>["currentUser"];
 
 type AuthContextType = {
   user: AuthUser;
