@@ -1,19 +1,57 @@
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { FinalToggleRow, ToggleRow } from "@/components/ToggleRow";
+import { useAuth } from "@/contexts/AuthContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import {
+    defaultNotificationPrefs,
+    updateUserProfile,
+    type NotificationPrefs,
+} from "@/services/userProfile";
 import { colors } from "@/theme/colors";
-import { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
 
 export default function NotificationsScreen() {
-  // TODO: load/save these from Firestore user prefs instead of local state
-  const [breakIns, setBreakIns] = useState(true);
-  const [fires, setFires] = useState(false);
-  const [gasLeaks, setGasLeaks] = useState(false);
-  const [nodeStatus, setNodeStatus] = useState(true);
-  const [lowBattery, setLowBattery] = useState(false);
-  const [firmwareUpdates, setFirmwareUpdates] = useState(false);
-  const [security, setSecurity] = useState(true);
-  const [productUpdates, setProductUpdates] = useState(false);
+  const { user } = useAuth();
+  const { profile, isLoading } = useUserProfile();
+  const [prefs, setPrefs] = useState<NotificationPrefs>(
+    defaultNotificationPrefs,
+  );
+
+  useEffect(() => {
+    if (profile?.notificationPrefs) {
+      setPrefs(profile.notificationPrefs);
+    }
+  }, [profile]);
+
+  const handleToggle = async (key: keyof NotificationPrefs, value: boolean) => {
+    if (!user) return;
+
+    // Update local UI immediately (optimistic update), then persist.
+    const updated = { ...prefs, [key]: value };
+    setPrefs(updated);
+
+    try {
+      await updateUserProfile(user.uid, { notificationPrefs: updated });
+    } catch (error) {
+      // Revert on failure, since the save didn't actually go through.
+      setPrefs(prefs);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -23,14 +61,18 @@ export default function NotificationsScreen() {
       <View style={styles.card}>
         <ToggleRow
           label="Break-ins"
-          value={breakIns}
-          onValueChange={setBreakIns}
+          value={prefs.breakIns}
+          onValueChange={(v) => handleToggle("breakIns", v)}
         />
-        <ToggleRow label="Fires" value={fires} onValueChange={setFires} />
+        <ToggleRow
+          label="Fires"
+          value={prefs.fires}
+          onValueChange={(v) => handleToggle("fires", v)}
+        />
         <FinalToggleRow
           label="Gas leaks"
-          value={gasLeaks}
-          onValueChange={setGasLeaks}
+          value={prefs.gasLeaks}
+          onValueChange={(v) => handleToggle("gasLeaks", v)}
         />
       </View>
 
@@ -38,18 +80,18 @@ export default function NotificationsScreen() {
       <View style={styles.card}>
         <ToggleRow
           label="Node offline/online"
-          value={nodeStatus}
-          onValueChange={setNodeStatus}
+          value={prefs.nodeStatus}
+          onValueChange={(v) => handleToggle("nodeStatus", v)}
         />
         <ToggleRow
           label="Low battery warnings"
-          value={lowBattery}
-          onValueChange={setLowBattery}
+          value={prefs.lowBattery}
+          onValueChange={(v) => handleToggle("lowBattery", v)}
         />
         <FinalToggleRow
           label="Firmware/system updates"
-          value={firmwareUpdates}
-          onValueChange={setFirmwareUpdates}
+          value={prefs.firmwareUpdates}
+          onValueChange={(v) => handleToggle("firmwareUpdates", v)}
         />
       </View>
 
@@ -57,13 +99,13 @@ export default function NotificationsScreen() {
       <View style={styles.card}>
         <ToggleRow
           label="Security"
-          value={security}
-          onValueChange={setSecurity}
+          value={prefs.security}
+          onValueChange={(v) => handleToggle("security", v)}
         />
         <FinalToggleRow
           label="Product updates and promotions"
-          value={productUpdates}
-          onValueChange={setProductUpdates}
+          value={prefs.productUpdates}
+          onValueChange={(v) => handleToggle("productUpdates", v)}
         />
       </View>
     </ScrollView>
@@ -72,9 +114,10 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.lightGreen, paddingTop: 60 },
+  centered: { justifyContent: "center", alignItems: "center" },
   content: { paddingHorizontal: 24, paddingBottom: 40 },
   sectionLabel: {
-    fontFamily: "Urbanist-Bold",
+    fontFamily: "Urbanist-SemiBold",
     fontSize: 15,
     color: colors.blue,
     marginBottom: 10,
