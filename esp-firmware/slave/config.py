@@ -2,7 +2,7 @@
 WIFI_SSID = "SecuriFi-Hub"
 WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07"
 
-MASTER_MAC = None # TODO
+MASTER_MAC = None # TODO pe partea de home setup
 
 MQ2_PIN = None # TODO
 MQ2_THRESHOLD = None # TODO
