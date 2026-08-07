@@ -1,45 +1,48 @@
-import { useState } from 'react';
+import { useAuth } from "@/contexts/AuthContext";
+import { colors } from "@/theme/colors";
+import { getAuth } from "@react-native-firebase/auth";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
+  doc,
+  getFirestore,
+  serverTimestamp,
+  setDoc,
+} from "@react-native-firebase/firestore";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { colors } from '@/theme/colors';
-import { getAuth } from '@react-native-firebase/auth';
-import { getFirestore, doc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
-
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity
+} from "react-native";
 
 export default function SignupScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signUp } = useAuth();
   const router = useRouter();
 
   const handleSignup = async () => {
     if (!email || !password || !confirmPassword || !phoneNumber) {
-      Alert.alert('Missing info', 'Please fill in all fields.');
+      Alert.alert("Missing info", "Please fill in all fields.");
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Password mismatch', 'Passwords do not match.');
+      Alert.alert("Password mismatch", "Passwords do not match.");
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+      Alert.alert("Weak password", "Password must be at least 6 characters.");
       return;
     }
 
@@ -49,31 +52,32 @@ export default function SignupScreen() {
 
       const currentUser = getAuth().currentUser;
       if (currentUser) {
-        await setDoc(doc(getFirestore(), 'users', currentUser.uid), {
+        await setDoc(doc(getFirestore(), "users", currentUser.uid), {
           email,
           phoneNumber,
           createdAt: serverTimestamp(),
         });
       }
     } catch (error: any) {
+      console.log("SIGNUP ERROR:", error); // temporary debug line
       const message = getFirebaseErrorMessage(error.code);
-      Alert.alert('Signup failed', message);
+      Alert.alert("Signup failed", message);
     } finally {
       setIsSubmitting(false);
-}
+    }
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
         <Image
-          source={require('@/assets/images/securi-fi-text-dark.png')}
+          source={require("@/assets/images/securi-fi-text-darkGreen.png")}
           style={styles.logo}
           resizeMode="contain"
         />
@@ -121,13 +125,13 @@ export default function SignupScreen() {
           disabled={isSubmitting}
         >
           <Text style={styles.signupButtonText}>
-            {isSubmitting ? 'Signing up...' : 'Sign up'}
+            {isSubmitting ? "Signing up..." : "Sign up"}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.loginLink}
-          onPress={() => router.push('/auth/login')}
+          onPress={() => router.push("/auth/login")}
         >
           <Text style={styles.loginText}>
             Already have an account? <Text style={styles.link}>Log in</Text>
@@ -140,14 +144,14 @@ export default function SignupScreen() {
 
 function getFirebaseErrorMessage(code: string): string {
   switch (code) {
-    case 'auth/email-already-in-use':
-      return 'An account with this email already exists.';
-    case 'auth/invalid-email':
-      return 'That email address looks invalid.';
-    case 'auth/weak-password':
-      return 'Password is too weak — please use at least 6 characters.';
+    case "auth/email-already-in-use":
+      return "An account with this email already exists.";
+    case "auth/invalid-email":
+      return "That email address looks invalid.";
+    case "auth/weak-password":
+      return "Password is too weak — please use at least 6 characters.";
     default:
-      return 'Something went wrong. Please try again.';
+      return "Something went wrong. Please try again.";
   }
 }
 
@@ -156,7 +160,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.lightGreen,
     paddingHorizontal: 24,
-    paddingTop: 60
+    paddingTop: 60,
   },
   scrollContent: {
     paddingTop: 0,
@@ -166,10 +170,10 @@ const styles = StyleSheet.create({
   logo: {
     width: 423,
     height: 150,
-    alignSelf: 'center'
+    alignSelf: "center",
   },
   label: {
-    fontFamily: 'Urbanist-Bold',
+    fontFamily: "Urbanist-Bold",
     color: colors.blue,
     marginBottom: 6,
     marginTop: 16,
@@ -180,36 +184,36 @@ const styles = StyleSheet.create({
     borderColor: colors.blue,
     borderRadius: 8,
     padding: 12,
-    fontFamily: 'Urbanist-Regular',
+    fontFamily: "Urbanist-Regular",
     fontSize: 16,
   },
   signupButton: {
     backgroundColor: colors.blue,
     borderRadius: 30,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 32,
     width: 120,
-    alignSelf: 'center'
+    alignSelf: "center",
   },
   signupButtonText: {
     color: colors.white,
-    fontFamily: 'Urbanist-Bold',
-    fontSize: 16
+    fontFamily: "Urbanist-Bold",
+    fontSize: 16,
   },
   link: {
     color: colors.blue,
-    fontFamily: 'Urbanist-Bold',
-    textAlign: 'center',
+    fontFamily: "Urbanist-Bold",
+    textAlign: "center",
     marginTop: 20,
   },
   loginLink: {
-    marginTop: 'auto',
-    marginBottom: 40
+    marginTop: "auto",
+    marginBottom: 40,
   },
   loginText: {
-    textAlign: 'center',
-    fontFamily: 'Urbanist-SemiBold',
+    textAlign: "center",
+    fontFamily: "Urbanist-SemiBold",
     color: colors.shadowGrey,
   },
 });
