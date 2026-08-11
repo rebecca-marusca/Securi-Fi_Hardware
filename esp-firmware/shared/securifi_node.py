@@ -32,9 +32,11 @@ class NodeReading:
         "packets_sent",
         "packets_dropped",
         "pps",
+
+        "raw_mq2_reading"
     )
 
-    def __init__(self, node_id: str, timestamp: int, movement_pct: int, state: str, gas_detected: bool, is_calibrated: bool, packets_sent: int, packets_dropped: int, pps: int):
+    def __init__(self, node_id: str, timestamp: int, movement_pct: int, state: str, gas_detected: bool, is_calibrated: bool, packets_sent: int, packets_dropped: int, pps: int, raw_mq2_reading: int):
         self.node_id = node_id
 
         self.timestamp = timestamp
@@ -47,6 +49,8 @@ class NodeReading:
         self.packets_sent = packets_sent
         self.packets_dropped = packets_dropped
         self.pps = pps
+
+        self.raw_mq2_reading = raw_mq2_reading
 
     def __repr__(self): # cum trebuie reprezentat obiectul cand e printat gen NodeReading(id = ..., mvt = ..., . . .)
         return (
@@ -136,6 +140,7 @@ class SecuriFiNode:
                     movement_pct=movement_pct,
                     state=state,
                     gas_detected=mq2_reading.gas_detected,
+                    raw_mq2_reading=mq2_reading.raw_value,
                     is_calibrated=True,
                     packets_sent=self._traffic_gen.packets_sent if self._traffic_gen else 0,
                     packets_dropped=self._traffic_gen.packets_dropped if self._traffic_gen else 0,

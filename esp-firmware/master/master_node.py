@@ -177,6 +177,7 @@ class MasterNode(SecuriFiNode):
             "state": own_reading.state,
             "movement_pct": own_reading.movement_pct,
             "probability": own_prob,
+            "raw_mq2_reading": own_reading.raw_mq2_reading,
             "warnings": {
                 "low_battery": False,
                 "not_transmitting": False,
@@ -199,6 +200,7 @@ class MasterNode(SecuriFiNode):
                     "state": "IDLE",
                     "movement_pct": 0,
                     "probability": 0.0,
+                    "raw_mq2_reading": 0,
                     "warnings": {
                         "low_battery": False, # TODO
                         "not_transmitting": True,
@@ -219,6 +221,7 @@ class MasterNode(SecuriFiNode):
                     "state": r.get("st", "IDLE"),
                     "movement_pct": r.get("mvt", 0),
                     "probability": prob,
+                    "raw_mq2_reading": r.get("mq2", 0),
                     "warnings": {
                         "low_battery": False, # TODO
                         "not_transmitting": False,
