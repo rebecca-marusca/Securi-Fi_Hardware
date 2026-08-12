@@ -18,26 +18,6 @@ WATCHDOG_SECONDS = 60
 SENSOR_POLL_MS = 50
 STALE_THRESHOLD_SECONDS = 5
 
-
-# State enum (mycropython n-are enum)
-STATE_BOOT = 0
-STATE_CALIBRATING = 1
-STATE_STANDBY = 2
-STATE_ARMED = 3
-STATE_DEEP_SLEEP = 4
-STATE_ERROR = 5
-
-# error codes: 
-ERR_WIFI_FAILED = "wifi_failed"
-ERR_CALIBRATION_FAILED = "calibration_failed"
-ERR_MQTT_FAILED = "mqtt_failed"
-ERR_WATCHDOG = "watchdog_timeout"
-ERR_MEMORY = "memory_error"
-ERR_SENSOR_FLAT = "sensor_flat"
-
-CALIBRATION_TIMEOUT_S = 120
-WIFI_MAX_ATTEMPTS = 3
-
 class NodeReading:
     __slots__ = (
         "node_id",
@@ -83,6 +63,25 @@ class NodeReading:
 
 
 class SecuriFiNode:
+    # State enum (mycropython n-are enum)
+    STATE_BOOT = 0
+    STATE_CALIBRATING = 1
+    STATE_STANDBY = 2
+    STATE_ARMED = 3
+    STATE_DEEP_SLEEP = 4
+    STATE_ERROR = 5
+
+    # error codes: 
+    ERR_WIFI_FAILED = "wifi_failed"
+    ERR_CALIBRATION_FAILED = "calibration_failed"
+    ERR_MQTT_FAILED = "mqtt_failed"
+    ERR_WATCHDOG = "watchdog_timeout"
+    ERR_MEMORY = "memory_error"
+    ERR_SENSOR_FLAT = "sensor_flat"
+
+    CALIBRATION_TIMEOUT_S = 120
+    WIFI_MAX_ATTEMPTS = 3
+
     def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, mq2_pin: int = 2, mq2_threshold: int = 1500, traffic_rate_pps: int = 20): # TODO sa scoatem / modificam valorile hardcodate pt mq2 pin & threshold 
         self._node_id = node_id
         self._wifi_ssid = wifi_ssid
@@ -183,8 +182,7 @@ class SecuriFiNode:
 
             elapsed = time.time() - self._last_valid_reading_ts
             if elapsed > WATCHDOG_SECONDS:
-                import machine 
-                machine.reset()
+                self._soft_reboot(self.ERR_WATCHDOG)
 
 
     # subclass hook:
@@ -198,8 +196,8 @@ class SecuriFiNode:
         wlan = network.WLAN(network.STA_IF)
         wlan.active(True)
 
-        for attempt in range(WIFI_MAX_ATTEMPTS):
-            print(f"[{self.node_id}] Wiif attempt {attempt + 1}/{WIFI_MAX_ATTEMPTS}")
+        for attempt in range(self.WIFI_MAX_ATTEMPTS):
+            print(f"[{self.node_id}] Wiif attempt {attempt + 1}/{self.WIFI_MAX_ATTEMPTS}")
 
             wlan.connect(self._wifi_ssid, self._wifi_password)
             deadline = time.time() + WIFI_TIMEOUT_SECONDS
@@ -213,6 +211,9 @@ class SecuriFiNode:
 
             if wlan.isconnected():
                 print(f"[{self._node_id}] Wifi connected, IP: {wlan.ifconfig()[0]}")
+                return wlan 
+
+        self._soft_reboot(self.ERR_WIFI_FAILED)
 
     def _resolve_router_mac(self, router_ip: str):
         try:
@@ -242,11 +243,11 @@ class SecuriFiNode:
         while not self._detector.is_calibrated:
             elapsed = int(time.time() - start)
 
-            if elapsed > CALIBRATION_TIMEOUT_S:
-                self._soft_reboot(ERR_CALIBRATION_FAILED)
+            if elapsed > self.CALIBRATION_TIMEOUT_S:
+                self._soft_reboot(self.ERR_CALIBRATION_FAILED)
 
             if elapsed % 5 == 0:
-                print(f"[{self._node_id}] Calibrating... {elapsed}s / {CALIBRATION_TIMEOUT_S}s")
+                print(f"[{self._node_id}] Calibrating... {elapsed}s / {self.CALIBRATION_TIMEOUT_S}s")
 
             time.sleep(0.5)
 
@@ -257,3 +258,5 @@ class SecuriFiNode:
 
         time.sleep(1)
         machine.reset()
+
+# TODO: implementat battery % 

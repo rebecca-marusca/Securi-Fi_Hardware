@@ -16,6 +16,8 @@ class SlaveNode(SecuriFiNode):
         self._tx_success = 0
         self._tx_failed = 0
 
+        self._state = self.STATE_CALIBRATING
+
     # hook:
     def _subclass_coroutines(self) -> list:
         self._init_espnow()
@@ -37,6 +39,22 @@ class SlaveNode(SecuriFiNode):
         except ImportError:
             print("Asigurati-va ca sunteti pe MicroPython :))")
             self._espnow = None
+
+    def _handle_espnow_command(self, cmd: dict) -> None:
+        command = cmd.get("cmd")
+
+        match command: 
+            case "arm":
+                print(f"[{self._node_id}] ARMED")
+                self._state = self.STATE_ARMED
+            case "standby":
+                print(f"[{self._node_id}] STANDBY")
+                self._state = self.STATE_STANDBY
+            case "sleep":
+                self._enter_deep_sleep()
+            case "reboot":
+                self._soft_reboot("master_command")
+
 
 
     # tx loop
@@ -93,3 +111,7 @@ class SlaveNode(SecuriFiNode):
     def _parse_mac(mac_str: str) -> bytes:
         parts = mac_str.strip().split(":")
         return bytes(int(p, 16) for p in parts)
+
+    
+    def _enter_deep_sleep(self) -> None:
+        pass # TODO
