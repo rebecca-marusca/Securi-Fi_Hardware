@@ -43,3 +43,4 @@ example
 /android
 
 mobile-app/GoogleService-Info.plist
+mobile-app/google-services.json
