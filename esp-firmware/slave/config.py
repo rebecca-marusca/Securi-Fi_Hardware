@@ -1,8 +1,8 @@
 # wifi
-WIFI_SSID = None # TODO
-WIFI_PASSWORD = None # TODO
+WIFI_SSID = "" # TODO
+WIFI_PASSWORD = "" # TODO
 
-MASTER_MAC = None # TODO pe partea de home setup
+MASTER_MAC = "" # TODO
 
 MQ2_PIN = None # TODO
 MQ2_THRESHOLD = None # TODO
