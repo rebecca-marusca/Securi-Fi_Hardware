@@ -1,4 +1,4 @@
-import { forwardRef, useState, useCallback, useMemo } from 'react';
+import { forwardRef, useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,10 +6,11 @@ import { colors } from '@/theme/colors';
 
 type ForgotPasswordSheetProps = {
     onClose: () => void;
+    initialEmail?: string;
 };
 
 export const ForgotPasswordSheet = forwardRef<BottomSheet, ForgotPasswordSheetProps>(
-    ({ onClose }, ref) => {
+    ({ onClose, initialEmail = '' }, ref) => {
         const [email, setEmail] = useState('');
         const [isSubmitting, setIsSubmitting] = useState(false);
         const { resetPassword } = useAuth();
@@ -48,6 +49,10 @@ export const ForgotPasswordSheet = forwardRef<BottomSheet, ForgotPasswordSheetPr
             []
         );
 
+        useEffect(() => {
+            setEmail(initialEmail);
+        }, [initialEmail]);
+
         return (
             <BottomSheet
                 ref={ref}
@@ -64,7 +69,7 @@ export const ForgotPasswordSheet = forwardRef<BottomSheet, ForgotPasswordSheetPr
                     </View>
 
                     <Text style={styles.description}>
-                        Enter the email address associated with your account, and we'll email you a link to reset your password
+                        We'll send a link to the email address you signed up with.
                     </Text>
 
                     <TextInput 
@@ -82,7 +87,7 @@ export const ForgotPasswordSheet = forwardRef<BottomSheet, ForgotPasswordSheetPr
                         disabled={isSubmitting}
                     >
                         <Text style={styles.sendButtonText}>
-                            {isSubmitting ? 'Sending...' : 'Send reset link'}
+                            {isSubmitting ? 'Sending...' : 'Send link'}
                         </Text>
                     </TouchableOpacity>
                 </BottomSheetView>
@@ -104,55 +109,56 @@ function getFirebaseErrorMessage(code: string): string {
 
 const styles = StyleSheet.create({
   sheetBackground: {
-    backgroundColor: colors.darkGreen,
+    backgroundColor: colors.bgSecondary1,
   },
   handleIndicator: {
-    backgroundColor: colors.lightGreen
+    backgroundColor: colors.accent
   },
   content: {
     flex: 1,
     paddingHorizontal: 20,
   },
   header: {
-    backgroundColor: colors.darkGreen,
-    // borderColor: colors.shadowGrey,
-    // borderWidth: 1,
+    backgroundColor: colors.bgSecondary1,
     marginHorizontal: -20,
     paddingVertical: 16,
   },
   headerText: {
-    color: colors.lightGreen,
-    fontFamily: 'Urbanist-Bold',
-    fontSize: 20,
+    color: colors.textMuted,
+    fontFamily: 'SF-Pro-Text-Semibold',
+    fontSize: 17,
     textAlign: 'center',
   },
   description: {
-    fontFamily: 'Urbanist-SemiBold',
+    fontFamily: 'SF-Pro-Text-Regular',
     textAlign: 'center',
-    color: colors.lightGreen,
+    color: colors.text,
     fontSize: 13,
-    marginBottom: 16,
-    lineHeight: 18,
+    marginBottom: 15,
   },
   input: {
-    backgroundColor: colors.white,
-    borderWidth: 2.5,
-    borderColor: colors.shadowGrey,
-    borderRadius: 8,
-    padding: 12,
-    fontFamily: 'Urbanist-Regular',
-    fontSize: 16,
-    marginBottom: 20,
+    backgroundColor: colors.bgSecondary2,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 15,
+    fontFamily: 'SF-Pro-Text-Medium',
+    fontSize: 15,
+    color: colors.textMuted,
+	borderColor: colors.accent,
+	borderWidth: 2,
+    marginBottom: 15
   },
   sendButton: {
-    backgroundColor: colors.shadowGrey,
-    borderRadius: 8,
-    paddingVertical: 14,
+    backgroundColor: colors.accent,
+    borderRadius: 1000,
+    paddingVertical: 15,
+    width: 118,
     alignItems: 'center',
+    alignSelf: 'center'
   },
   sendButtonText: {
-    color: colors.lightGreen,
-    fontFamily: 'Urbanist-Bold',
+    color: colors.bgSecondary1,
+    fontFamily: 'SF-Pro-Text-Semibold',
     fontSize: 15,
   },
 });

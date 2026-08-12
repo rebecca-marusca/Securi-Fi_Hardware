@@ -10,9 +10,11 @@ function RootNavigation() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { activeAlert, isLoading: alertLoading } = useActiveAlert();
   const [fontsLoaded] = useFonts({
-    "Urbanist-Regular": require("@/assets/fonts/Urbanist-Regular.ttf"),
-    "Urbanist-Bold": require("@/assets/fonts/Urbanist-Bold.ttf"),
-    "Urbanist-SemiBold": require("@/assets/fonts/Urbanist-SemiBold.ttf"),
+    "SF-Pro-Text-Regular": require("@/assets/fonts/SF-Pro-Text-Regular.otf"),
+    "SF-Pro-Text-Bold": require("@/assets/fonts/SF-Pro-Text-Bold.otf"),
+    "SF-Pro-Text-Semibold": require("@/assets/fonts/SF-Pro-Text-Semibold.otf"),
+    "SF-Pro-Text-Medium": require("@/assets/fonts/SF-Pro-Text-Medium.otf"),
+    "SF-Pro": require("@/assets/fonts/SF-Pro.ttf")
   })
 
   if (authLoading || alertLoading || !fontsLoaded) {

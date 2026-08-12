@@ -5,10 +5,12 @@ export const colors = {
   shadowGrey: '#352E38',
   white: '#ffffff',
   lightBlue: '#C3CCD1',
-  text: '#352E38',
-  dominantBase: '#E7EFEA',
+  base: '#E7EFEA',
+  bgSecondary1: '#DDE7DF',
+  bgSecondary2: '#CDD9D5',
+  text: '#352D38',
   textMuted: '#4B696E',
-  secondaryBg1: '#DDE7DF',
-  secondaryBg2: '#CDD9D5',
-  accent: '#3E7466'
+  accent: '#3E7466',
 };
+
+export type ColorToken = keyof typeof colors;

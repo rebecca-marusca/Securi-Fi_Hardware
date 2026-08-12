@@ -1,67 +1,58 @@
-import { useAuth } from "@/contexts/AuthContext";
-import { colors } from "@/theme/colors";
-import { getAuth } from "@react-native-firebase/auth";
-import {
-  doc,
-  getFirestore,
-  serverTimestamp,
-  setDoc,
-} from "@react-native-firebase/firestore";
-import { useRouter } from "expo-router";
-import { useState } from "react";
-import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity
-} from "react-native";
+import { useState } from 'react';
+import { View, Text, TextInput, Pressable, StyleSheet, Image, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { getAuth, createUserWithEmailAndPassword, updateProfile } from '@react-native-firebase/auth';
+import { getFirestore, doc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
+import { colors } from '@/theme/colors';
 
 export default function SignupScreen() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const { email } = useLocalSearchParams<{ email: string }>();
+
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { signUp } = useAuth();
-  const router = useRouter();
 
-  const handleSignup = async () => {
-    if (!email || !password || !confirmPassword || !phoneNumber) {
-      Alert.alert("Missing info", "Please fill in all fields.");
+  const handleContinue = async () => {
+    if (!name.trim() || !phone.trim() || !password || !confirmPassword) {
+      setError('Fill in all fields to continue');
       return;
     }
-
     if (password !== confirmPassword) {
-      Alert.alert("Password mismatch", "Passwords do not match.");
+      setError('Passwords don\u2019t match');
       return;
     }
-
     if (password.length < 6) {
-      Alert.alert("Weak password", "Password must be at least 6 characters.");
+      setError('Password must be at least 6 characters');
       return;
     }
 
+    setError(null);
     setIsSubmitting(true);
-    try {
-      await signUp(email, password);
 
-      const currentUser = getAuth().currentUser;
-      if (currentUser) {
-        await setDoc(doc(getFirestore(), "users", currentUser.uid), {
-          email,
-          phoneNumber,
-          createdAt: serverTimestamp(),
-        });
-      }
+    try {
+      const auth = getAuth();
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(credential.user, { displayName: name.trim() });
+
+      await setDoc(
+        doc(getFirestore(), 'users', credential.user.uid),
+        { email, phoneNumber: phone.trim(), displayName: name.trim(), createdAt: serverTimestamp() },
+        { merge: true }
+      );
+      // Success: onAuthStateChanged in root layout handles the redirect.
     } catch (error: any) {
-      console.log("SIGNUP ERROR:", error); // temporary debug line
-      const message = getFirebaseErrorMessage(error.code);
-      Alert.alert("Signup failed", message);
+      const code = error?.code as string | undefined;
+
+      if (code === 'auth/email-already-in-use') {
+        setError('An account with this email already exists');
+      } else if (code === 'auth/weak-password') {
+        setError('Password is too weak');
+      } else {
+        setError('Something went wrong. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -69,151 +60,100 @@ export default function SignupScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+       style={styles.container}
+       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
       >
-        <Image
-          source={require("@/assets/images/securi-fi-text-darkGreen.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+      <Image
+        source={require('@/assets/images/sign-up-text.png')}
+        style={styles.headerImage}
+        resizeMode="contain"
+      />
 
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-        />
-
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="new-password"
-        />
-
-        <Text style={styles.label}>Confirm password</Text>
-        <TextInput
-          style={styles.input}
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry
-          autoComplete="new-password"
-        />
+        <Text style={styles.label}>Name</Text>
+        <TextInput style={styles.input} value={name} onChangeText={setName} placeholderTextColor={colors.textMuted} />
 
         <Text style={styles.label}>Phone Number</Text>
-        <TextInput
-          style={styles.input}
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
-          keyboardType="phone-pad"
-          autoComplete="tel"
-        />
+        <TextInput style={styles.input} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholderTextColor={colors.textMuted} />
 
-        <TouchableOpacity
-          style={styles.signupButton}
-          onPress={handleSignup}
-          disabled={isSubmitting}
-        >
-          <Text style={styles.signupButtonText}>
-            {isSubmitting ? "Signing up..." : "Sign up"}
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.label}>Password</Text>
+        <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry placeholderTextColor={colors.textMuted} />
 
-        <TouchableOpacity
-          style={styles.loginLink}
-          onPress={() => router.push("/auth/login")}
-        >
-          <Text style={styles.loginText}>
-            Already have an account? <Text style={styles.link}>Log in</Text>
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.label}>Confirm Password</Text>
+        <TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry placeholderTextColor={colors.textMuted} />
+
+        {error && <Text style={styles.errorText}>{error}</Text>}
+        <View style={styles.spacer} />
+
+        <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={handleContinue} disabled={isSubmitting}>
+          <Text style={styles.buttonText}>{isSubmitting ? 'Creating account…' : 'Continue'}</Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-function getFirebaseErrorMessage(code: string): string {
-  switch (code) {
-    case "auth/email-already-in-use":
-      return "An account with this email already exists.";
-    case "auth/invalid-email":
-      return "That email address looks invalid.";
-    case "auth/weak-password":
-      return "Password is too weak — please use at least 6 characters.";
-    default:
-      return "Something went wrong. Please try again.";
-  }
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.lightGreen,
+    backgroundColor: colors.base,
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: 64,
+    paddingBottom: 40
   },
   scrollContent: {
-    paddingTop: 0,
-    paddingBottom: 40,
-    flexGrow: 1,
+	paddingBottom: 40,
+	flexGrow: 1
   },
-  logo: {
-    width: 423,
+  headerImage: {
+    width: 500,
     height: 150,
-    alignSelf: "center",
+    alignSelf: 'center',
   },
   label: {
-    fontFamily: "Urbanist-Bold",
-    color: colors.blue,
-    marginBottom: 6,
+    fontFamily: 'SF-Pro-Text-Bold',
+    fontSize: 17,
+    color: colors.text,
     marginTop: 16,
+    marginBottom: 8,
   },
   input: {
-    backgroundColor: colors.lightBlue,
-    borderWidth: 2.5,
-    borderColor: colors.blue,
-    borderRadius: 8,
-    padding: 12,
-    fontFamily: "Urbanist-Regular",
+    backgroundColor: colors.bgSecondary2,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 15,
+    fontFamily: 'SF-Pro-Text-Medium',
+    fontSize: 15,
+    color: colors.textMuted,
+    borderColor: colors.accent,
+    borderWidth: 2
+  },
+  errorText: {
+    fontFamily: 'SF-Pro-Text-Regular',
+    fontSize: 13,
+    color: '#B3453D',
+    marginTop: 12,
+  },
+  spacer: {
+    flex: 1,
+  },
+  button: {
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 30,
+    marginHorizontal: 15,
+  },
+  buttonPressed: {
+    opacity: 0.85,
+  },
+  buttonText: {
+    fontFamily: 'SF-Pro-Text-Semibold',
     fontSize: 16,
-  },
-  signupButton: {
-    backgroundColor: colors.blue,
-    borderRadius: 30,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 32,
-    width: 120,
-    alignSelf: "center",
-  },
-  signupButtonText: {
-    color: colors.white,
-    fontFamily: "Urbanist-Bold",
-    fontSize: 16,
-  },
-  link: {
-    color: colors.blue,
-    fontFamily: "Urbanist-Bold",
-    textAlign: "center",
-    marginTop: 20,
-  },
-  loginLink: {
-    marginTop: "auto",
-    marginBottom: 40,
-  },
-  loginText: {
-    textAlign: "center",
-    fontFamily: "Urbanist-SemiBold",
-    color: colors.shadowGrey,
+    color: colors.base,
   },
 });
