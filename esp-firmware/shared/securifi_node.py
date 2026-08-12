@@ -3,6 +3,7 @@
 import asyncio
 import _thread
 
+import machine
 import network 
 import time 
 
@@ -17,6 +18,25 @@ WATCHDOG_SECONDS = 60
 SENSOR_POLL_MS = 50
 STALE_THRESHOLD_SECONDS = 5
 
+
+# State enum (mycropython n-are enum)
+STATE_BOOT = 0
+STATE_CALIBRATING = 1
+STATE_STANDBY = 2
+STATE_ARMED = 3
+STATE_DEEP_SLEEP = 4
+STATE_ERROR = 5
+
+# error codes: 
+ERR_WIFI_FAILED = "wifi_failed"
+ERR_CALIBRATION_FAILED = "calibration_failed"
+ERR_MQTT_FAILED = "mqtt_failed"
+ERR_WATCHDOG = "watchdog_timeout"
+ERR_MEMORY = "memory_error"
+ERR_SENSOR_FLAT = "sensor_flat"
+
+CALIBRATION_TIMEOUT_S = 120
+WIFI_MAX_ATTEMPTS = 3
 
 class NodeReading:
     __slots__ = (
@@ -177,16 +197,22 @@ class SecuriFiNode:
     def _connect_wifi(self):
         wlan = network.WLAN(network.STA_IF)
         wlan.active(True)
-        wlan.connect(self._wifi_ssid, self._wifi_password)
 
-        deadline = time.time() + WIFI_TIMEOUT_SECONDS
-        while not wlan.isconnected():
-            if time.time() > deadline:
-                import machine
-                machine.reset()
-            time.sleep(0.5)
+        for attempt in range(WIFI_MAX_ATTEMPTS):
+            print(f"[{self.node_id}] Wiif attempt {attempt + 1}/{WIFI_MAX_ATTEMPTS}")
 
-        return wlan
+            wlan.connect(self._wifi_ssid, self._wifi_password)
+            deadline = time.time() + WIFI_TIMEOUT_SECONDS
+
+            while not wlan.isconnected():
+                if time.time() > deadline:
+                    wlan.disconnect()
+                    time.sleep(1)
+                    break
+                time.sleep(0.5)
+
+            if wlan.isconnected():
+                print(f"[{self._node_id}] Wifi connected, IP: {wlan.ifconfig()[0]}")
 
     def _resolve_router_mac(self, router_ip: str):
         try:
@@ -210,13 +236,24 @@ class SecuriFiNode:
         return None
 
     def _wait_for_calibration(self) -> None:
-        print(f"[{self._node_id}]: Waiting for gain lock calibration...")
+        print(f"[{self._node_id}] Calibrating...")
         start = time.time()
 
         while not self._detector.is_calibrated:
             elapsed = int(time.time() - start)
-            print(f"[{self._node_id}]: Calibrating... {elapsed}s")
+
+            if elapsed > CALIBRATION_TIMEOUT_S:
+                self._soft_reboot(ERR_CALIBRATION_FAILED)
+
+            if elapsed % 5 == 0:
+                print(f"[{self._node_id}] Calibrating... {elapsed}s / {CALIBRATION_TIMEOUT_S}s")
+
             time.sleep(0.5)
 
-        elapsed = int(time.time() - start)
-        print(f"[{self._node_id}]: Calibrated in {elapsed}s. Threshold: {self._detector.threshold:.4f}")
+        print(f"[{self._node_id}] Calibrated in {int(time.time() - start)}s")
+
+    def _soft_reboot(self, reason: str) -> None:
+        print(f"[{self._node_id}] SOFT REBOOT: {reason}")
+
+        time.sleep(1)
+        machine.reset()

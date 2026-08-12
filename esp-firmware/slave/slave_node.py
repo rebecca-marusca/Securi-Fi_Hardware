@@ -33,7 +33,7 @@ class SlaveNode(SecuriFiNode):
                 raise RuntimeError("MASTER_MAC not set in config")
             self._espnow.add_peer(self._master_mac_bytes, channel=ESPNOW_CHANNEL)
 
-            print(f"[{self._node_id}]: ESP-NOW initialized, master peer: {self._master_mac}")
+            print(f"[{self._node_id}] ESP-NOW initialized, master peer: {self._master_mac}")
         except ImportError:
             print("Asigurati-va ca sunteti pe MicroPython :))")
             self._espnow = None
@@ -44,7 +44,7 @@ class SlaveNode(SecuriFiNode):
         while not self._detector.is_calibrated:
             await asyncio.sleep_ms(200)
 
-        print(f"[{self._node_id}]: Starting ESP-NOW TX")
+        print(f"[{self._node_id}] Starting ESP-NOW TX")
 
         while self._running:
             reading = self.get_reading()

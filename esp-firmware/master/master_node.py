@@ -51,7 +51,7 @@ class MasterNode(SecuriFiNode):
                 mac_bytes = self._parse_mac(mac)
                 self._espnow.add_peer(mac_bytes, channel=ESPNOW_CHANNEL)
 
-            print(f"[{self._node_id}]: ESP_NOW initialized, {len(self._slave_macs)} slave peers registered")
+            print(f"[{self._node_id}] ESP_NOW initialized, {len(self._slave_macs)} slave peers registered")
         except ImportError:
             self._espnow = None
 
@@ -91,18 +91,18 @@ class MasterNode(SecuriFiNode):
             from umqtt.simple import MQTTClient
             self._mqtt = MQTTClient(client_id=MQTT_CLIENT_ID, server=MQTT_BROKER, port=MQTT_PORT, user=MQTT_USERNAME or None, password=MQTT_PASSWORD or None, keepalive=30)
             self._mqtt.connect()
-            print(f"[{self._node_id}]: MQTT connected to {MQTT_BROKER}:{MQTT_PORT}")
+            print(f"[{self._node_id}] MQTT connected to {MQTT_BROKER}:{MQTT_PORT}")
         except ImportError:
             self._mqtt = None
         except OSError as e:
-            print(f"[{self._node_id}]: MQTT connection failed: {e}")
+            print(f"[{self._node_id}] MQTT connection failed: {e}")
             self._mqtt = None
 
     async def _loop_mqtt_publish(self) -> None:
         while not self._detector.is_calibrated:
             await asyncio.sleep_ms(200)
 
-        print(f"[{self._node_id}]: Starting MQTT publish loop")
+        print(f"[{self._node_id}] Starting MQTT publish loop")
 
         while self._running:
             own_reading = self.get_reading()
@@ -131,7 +131,7 @@ class MasterNode(SecuriFiNode):
         try: 
             self._mqtt.set_callback(on_message)
             self._mqtt.subscribe(cmd_topic)
-            print(f"[{self._node_id}]: Subscribed to {cmd_topic}")
+            print(f"[{self._node_id}] Subscribed to {cmd_topic}")
         except OSError:
             return
 
@@ -144,7 +144,7 @@ class MasterNode(SecuriFiNode):
 
     async def _mqtt_publish(self, payload: bytes) -> None: 
         if self._mqtt is None:
-            print(f"[{self._node_id}]: Didn't publish: {payload.decode()}")
+            print(f"[{self._node_id}] Didn't publish: {payload.decode()}")
             return 
 
         try: 
@@ -157,10 +157,10 @@ class MasterNode(SecuriFiNode):
             await asyncio.sleep(2)
             try:
                 self._mqtt.connect()
-                print(f"[{self._node_id}]: MQTT reconnected")
+                print(f"[{self._node_id}] MQTT reconnected")
                 return
             except OSError:
-                print(f"[{self._node_id}]: MQTT reconnect attemt {attempt + 1} failed")
+                print(f"[{self._node_id}] MQTT reconnect attemt {attempt + 1} failed")
 
 
     # package builder
@@ -268,4 +268,4 @@ class MasterNode(SecuriFiNode):
         except Exception:
             return "00:00:00:00:00:00"
 
-        
+

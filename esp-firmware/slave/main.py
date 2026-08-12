@@ -27,7 +27,7 @@ def boot() -> None:
     from slave_node import SlaveNode
 
     node_id = read_node_id()
-    print(f"[boot]: Starting as {node_id}")
+    print(f"[boot] Starting as {node_id}")
 
     node = SlaveNode(node_id=node_id, wifi_ssid=WIFI_SSID, wifi_password=WIFI_PASSWORD, master_mac=MASTER_MAC, mq2_pin=MQ2_PIN, mq2_threshold=MQ2_THRESHOLD, traffic_rate_pps=TRAFFIC_RATE_PPS)
 
@@ -38,8 +38,8 @@ try:
     boot()
 except Exception as e:
     sys.print_exception(e)
-    print(f"[boot]: fatal error {e}")
-    print("[boot]: Rebooting in 5s")
+    print(f"[boot] fatal error {e}")
+    print("[boot] Rebooting in 5s")
     time.sleep(5)
     import machine
     machine.reset()
