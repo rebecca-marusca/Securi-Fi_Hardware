@@ -17,7 +17,8 @@
         "backgroundColor": "#E6F4FE"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.securifiapp"
+      "package": "com.anonymous.securifiapp",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -37,7 +38,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#557473",
-          "image": "./assets/images/securi-fi-text-light.png",
+          "image": "./assets/images/securi-fi-text-lightGreen.png",
           "imageWidth": 390
         }
       ],
@@ -45,7 +46,8 @@
       "expo-image",
       "expo-status-bar",
       "@react-native-firebase/app",
-      "@react-native-firebase/auth"
+      "@react-native-firebase/auth",
+      "./plugins/withFirebaseSPMFix.js"
     ],
     "experiments": {
       "typedRoutes": true,
