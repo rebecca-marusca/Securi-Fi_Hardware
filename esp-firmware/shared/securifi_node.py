@@ -33,7 +33,10 @@ class NodeReading:
         "packets_dropped",
         "pps",
 
-        "raw_mq2_reading"
+        "raw_mq2_reading",
+
+        "battery_pct",
+        "low_battery"
     )
 
     def __init__(self, node_id: str, timestamp: int, movement_pct: int, state: str, gas_detected: bool, is_calibrated: bool, packets_sent: int, packets_dropped: int, pps: int, raw_mq2_reading: int):
@@ -51,6 +54,9 @@ class NodeReading:
         self.pps = pps
 
         self.raw_mq2_reading = raw_mq2_reading
+
+        self.battery_pct = None # TODO
+        self.low_battery = None # TODO
 
     def __repr__(self): # cum trebuie reprezentat obiectul cand e printat gen NodeReading(id = ..., mvt = ..., . . .)
         return (

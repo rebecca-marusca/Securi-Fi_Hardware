@@ -62,16 +62,38 @@ class SlaveNode(SecuriFiNode):
         while not self._detector.is_calibrated:
             await asyncio.sleep_ms(200)
 
-        print(f"[{self._node_id}] Starting ESP-NOW TX")
+        self._state = self.STATE_STANDBY
+        print(f"[{self._node_id}] Calibrated, entering standby")
 
         while self._running:
-            reading = self.get_reading()
+            if self._state == self.STATE_ARMED:
+                reading = self.get_reading()
 
-            if reading is not None:
-                payload = self._build_payload(reading)
-                await self._send_with_retry(payload)
+                if reading is not None:
+                    payload = self._build_payload(reading)
+                    await self._send_with_retry(payload)
 
             await asyncio.sleep_ms(ESPNOW_TX_INTERVAL_MS)
+
+    async def _loop_espnow_rx(self) -> None: 
+        while self._running:
+            if self._espnow is None:
+                await asyncio.sleep_ms(100)
+                continue
+
+            try:
+                result = self._espnow.recv(0)  # TODO de verificat daca 0 sau timeout=0
+                if result is not None:  
+                    mac, data = result
+                    try:
+                        cmd = json.loads(data.decode("utf-8"))
+                        self._handle_espnow_command(cmd)
+                    except ValueError:
+                        pass
+            except OSError:
+                pass
+
+            await asyncio.sleep_ms(10)
 
     async def _send_with_retry(self, payload: bytes) -> None:
         if self._espnow is None:
@@ -100,7 +122,10 @@ class SlaveNode(SecuriFiNode):
             "gas": reading.gas_detected,
             "pkt": reading.packets_sent,
             "drp": reading.packets_dropped,
-            "mq2": reading.raw_mq2_reading
+            "mq2": reading.raw_mq2_reading,
+            "bat": reading.battery_pct,
+            "low_bat": reading.low_battery,
+            "sen_flat": self._sensor_flat
         }
 
         return json.dumps(data).encode("utf-8") # dict -> str -> bytes ca esp-now poate transmite numai bytes
