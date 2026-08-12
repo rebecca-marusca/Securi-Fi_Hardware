@@ -21,6 +21,7 @@ class MasterNode(SecuriFiNode):
         self._slave_macs = slave_macs or []
         self._espnow = None
         self._mqtt = None
+        self._sensor_flat = None # TODO in securifi node??
 
         self._slave_states: dict = {}
         for i, mac in enumerate(self._slave_macs):
@@ -119,9 +120,24 @@ class MasterNode(SecuriFiNode):
         def on_message(topic, msg):
             try:
                 data = json.loads(msg.decode("utf-8"))
-                if "armed" in data:
-                    self._armed = bool(data["armed"])
-                    print(f"[{self._node_id}] Armed state: {self._armed}")
+                command = data.get("cmd")
+
+                match command:
+                    case "arm":
+                        self._armed = True
+                        self._broadcast_espnow({"cmd": "arm"})
+                    case "standby":
+                        self._armed = False
+                        self._broadcast_espnow({"cmd": "standby"})
+                    case "sleep":
+                        self._broadcast_espnow({"cmd": "sleep"})
+                    case "reboot":
+                        self._broadcast_espnow({"cmd": "reboot"})
+                        time.sleep(1)
+                        self._soft_reboot("server_command")
+                    case "reboot_slave":
+                        target = data.get("node_id")
+                        self._send_espnow_to(target, {"cmd": "reboot"})
             except ValueError:
                 pass
 
@@ -153,15 +169,23 @@ class MasterNode(SecuriFiNode):
             await self._mqtt_reconnect()
 
     async def _mqtt_reconnect(self) -> None: 
+        print(f"[{self._node_id}] MQTT lost, attempting reconnect")
         for attempt in range(MQTT_RECONNECT_ATTEMPTS):
             await asyncio.sleep(2)
             try:
                 self._mqtt.connect()
+
+                cmd_topic = f"{MQTT_TOPIC}/cmd"
+                self._mqtt.subscribe(cmd_topic)
+
                 print(f"[{self._node_id}] MQTT reconnected")
                 return
             except OSError:
-                print(f"[{self._node_id}] MQTT reconnect attemt {attempt + 1} failed")
+                print(f"[{self._node_id}] MQTT reconnect attempt {attempt + 1} failed")
 
+        print(f"[{self._node_id}] MQTT reconnect failed, soft rebooting the master...")
+        await asyncio.sleep(1)
+        self._soft_reboot(self.ERR_MQTT_FAILED)
 
     # package builder
     def _build_package(self, own_reading: NodeReading) -> dict:
@@ -179,9 +203,10 @@ class MasterNode(SecuriFiNode):
             "probability": own_prob,
             "raw_mq2_reading": own_reading.raw_mq2_reading,
             "warnings": {
-                "low_battery": False,
+                "low_battery": own_reading.low_battery,
                 "not_transmitting": False,
-                "signal_weak": False
+                "signal_weak": False,
+                "sensor_flat": self._sensor_flat
             },
             "sensors":{
                 "flame": False, # TODO
@@ -202,12 +227,13 @@ class MasterNode(SecuriFiNode):
                     "probability": 0.0,
                     "raw_mq2_reading": 0,
                     "warnings": {
-                        "low_battery": False, # TODO
+                        "low_battery": False, 
                         "not_transmitting": True,
-                        "signal_weak": False # TODO
+                        "signal_weak": False, 
+                        "sensor_flat": False
                     },
                     "sensors":{
-                        "flame": False, # TODO
+                        "flame": False, 
                         "gas": False
                     }
                 })
@@ -223,9 +249,10 @@ class MasterNode(SecuriFiNode):
                     "probability": prob,
                     "raw_mq2_reading": r.get("mq2", 0),
                     "warnings": {
-                        "low_battery": False, # TODO
+                        "low_battery": r.get("low_bat", False), # TODO
                         "not_transmitting": False,
-                        "signal_weak": False # TODO
+                        "signal_weak": False, # TODO
+                        "sensor_flat": r.get("sen_flat", False)
                     },
                     "sensors":{
                         "flame": False, # TODO
@@ -267,5 +294,19 @@ class MasterNode(SecuriFiNode):
             return ":".join(f"{b:02X}" for b in mac_bytes)
         except Exception:
             return "00:00:00:00:00:00"
+
+    def _broadcast_espnow(self, cmd: dict) -> None:
+        payload = json.dumps(cmd).encode("utf-8")
+        for mac_bytes in self._slave_states:
+            try:
+                self._espnow.send(mac_bytes, payload)
+            except OSError:
+                pass # TODO cv print-uri
+
+    def _send_espnow_to(self, target: str, payload: dict) -> None: # target e numeric
+        try:
+            self._espnow.send(self._parse_mac(SLAVE_MACS[int(target) - 1]), payload) # TODO: errors for everything that can go wrong with macs !!! FLASHING ORDER VS MAC ID
+        except OSError:
+            pass # TODO
 
 
