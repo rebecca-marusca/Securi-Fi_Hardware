@@ -1,11 +1,11 @@
 # wifi
-WIFI_SSID = None # TODO
-WIFI_PASSWORD = None # TODO
+WIFI_SSID = "SecuriFi-Hub" # TODO
+WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07" # TODO
 
-MASTER_MAC = None # TODO
+MASTER_MAC = "58:E6:C5:12:05:E0" # COM6 # TODO
 
-MQ2_PIN = None # TODO
-MQ2_THRESHOLD = None # TODO
+MQ2_PIN = 0 # TODO
+MQ2_THRESHOLD = 1500 # TODO
 
 # traffic generator
 TRAFFIC_RATE_PPS = 20

@@ -16,7 +16,7 @@ class SlaveState:
 
 
 class MasterNode(SecuriFiNode):
-    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, slave_macs: list = None, mq2_pin: int = 2, mq2_threshold: int = 1500, traffic_rate_pps: int = 20):
+    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, slave_macs: list = None, mq2_pin: int = 0, mq2_threshold: int = 1500, traffic_rate_pps: int = 20):
         super().__init__(node_id=node_id, wifi_ssid=wifi_ssid, wifi_password=wifi_password, mq2_pin=mq2_pin, mq2_threshold=mq2_threshold, traffic_rate_pps=traffic_rate_pps)
         self._slave_macs = slave_macs or []
         self._espnow = None
@@ -62,7 +62,7 @@ class MasterNode(SecuriFiNode):
                 continue
 
             try:
-                result = self._espnow.recv(timeout=0)
+                result = self._espnow.recv(0)
                 if result is not None:
                     mac, data = result
                     self._handle_slave_packet(mac, data)

@@ -6,10 +6,10 @@ import _thread
 import network 
 import time 
 
-from mvs_detector import MVSDetector
-from traffic_generator import TrafficGenerator
-from csi_capture import CSICapture
-from mq2 import MQ2Sensor
+from .mvs_detector import MVSDetector
+from .traffic_generator import TrafficGenerator
+from .csi_capture import CSICapture
+from .mq2 import MQ2Sensor
 
 
 WIFI_TIMEOUT_SECONDS = 20
@@ -108,6 +108,7 @@ class SecuriFiNode:
 
         self._csi_capture = CSICapture(detector=self._detector, router_mac=router_mac)
         self._csi_capture.start()
+        _thread.start_new_thread(self._csi_capture.run, ())
         self._wait_for_calibration()
 
         asyncio.run(self._main_loop())
