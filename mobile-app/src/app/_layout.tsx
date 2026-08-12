@@ -2,12 +2,20 @@ import { SplashOverlay } from "@/components/splash-overlay";
 import { AlertProvider, useActiveAlert } from "@/contexts/AlertContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Redirect, Slot } from "expo-router";
+import { useFonts } from "expo-font";
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+
 
 function RootNavigation() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { activeAlert, isLoading: alertLoading } = useActiveAlert();
+  const [fontsLoaded] = useFonts({
+    "Urbanist-Regular": require("@/assets/fonts/Urbanist-Regular.ttf"),
+    "Urbanist-Bold": require("@/assets/fonts/Urbanist-Bold.ttf"),
+    "Urbanist-SemiBold": require("@/assets/fonts/Urbanist-SemiBold.ttf"),
+  })
 
-  if (authLoading || alertLoading) {
+  if (authLoading || alertLoading || !fontsLoaded) {
     return <SplashOverlay />;
   }
 
@@ -16,12 +24,14 @@ function RootNavigation() {
   }
 
   if (activeAlert) {
-    <Redirect
-      href={{
-        pathname: "/alert/[alertId]",
-        params: { alertId: activeAlert.alertId },
-      }}
-    />;
+    return (
+      <Redirect
+        href={{
+          pathname: "/alert/[alertId]",
+          params: { alertId: activeAlert.alertId },
+        }}
+      />
+    );
   }
 
   return <Redirect href="/tabs/home" />;
@@ -29,15 +39,20 @@ function RootNavigation() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <AlertProvider>
-        <Slot />
-        <RootNavigationGate />
-      </AlertProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <AlertProvider>
+          <Slot />
+          <RootNavigation />
+        </AlertProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }
 
-function RootNavigationGate() {
-  return <RootNavigation />;
-}
+// const styles = StyleSheet.create({
+//   symbol: {
+//     tintColor: colors.darkGreen,
+//     size: 20
+//   },
+// });
