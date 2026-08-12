@@ -1,8 +1,9 @@
 # cand e eroare la import-uri, ignorati-le ca apar pt ca sunteti in python env si nu micro python
+#OBS: DACA SENZORUL NU E CONECTAT LA D0, CONECTATI D0 LA UN GND CA SA NU AVETI NOISE 
 import time 
 
 WARMUP_SECONDS = 30
-DEFAULT_ADC_PIN = 2
+DEFAULT_ADC_PIN = 0
 DEFAULT_THRESHOLD = 1500
 CONSECUTIVE_TRIGGER_COUNT = 3
 
@@ -79,7 +80,7 @@ class MQ2Sensor:
 
         self._last_gas_detected = gas_detected
 
-        return MQ2Reading(raw_value=raw, gas_detected=gas_detected, is_ready=ready)
+        return MQ2Reading(raw_value=self.normalize_mq2_reading(raw), gas_detected=gas_detected, is_ready=ready)
 
     def last_reading(self) -> MQ2Reading:
         return MQ2Reading(raw_value=self._last_raw, gas_detected=self._last_gas_detected, is_ready=self.is_ready)
@@ -97,5 +98,13 @@ class MQ2Sensor:
             self._adc.width(ADC.WIDTH_12BIT)
         except (ImportError, AttributeError):
             self._adc = None
+
+    @staticmethod
+    def normalize_mq2_reading(raw_val: int) -> int: # din cauza voltage divider-ului voltajul dat de mq2 e redus ca urmare trebuie sa normalizam valoarea data
+        # pt putin context Vs = Vcc * R2 / (R1 + R2), unde noi avem Vcc = 5V, R1 = 10k, R2 = 15k, Vs =  3V (nu 3.3V ca sa lasam un pic de gap)
+        ratio = 5 / 3
+
+        return int(raw_val * ratio)
+
 
         

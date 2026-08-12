@@ -3,7 +3,7 @@
 # core 1 - partea de csi traffic generator & mvs detection
 
 # 52 data + 4 pilot = 56 total, but ESPectre uses 52 data subcarriers
-NUM_SUBCARRIERS = 52
+NUM_SUBCARRIERS = 32
  
 WINDOW_SIZE = 30 # TODO
 

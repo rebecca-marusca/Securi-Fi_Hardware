@@ -81,7 +81,8 @@ class SlaveNode(SecuriFiNode):
             "st": reading.state,
             "gas": reading.gas_detected,
             "pkt": reading.packets_sent,
-            "drp": reading.packets_dropped
+            "drp": reading.packets_dropped,
+            "mq2": reading.raw_mq2_reading
         }
 
         return json.dumps(data).encode("utf-8") # dict -> str -> bytes ca esp-now poate transmite numai bytes
