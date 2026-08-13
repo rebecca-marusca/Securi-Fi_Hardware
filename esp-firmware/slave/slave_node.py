@@ -82,16 +82,16 @@ class SlaveNode(SecuriFiNode):
                 continue
 
             try:
-                result = self._espnow.recv(0)  # TODO de verificat daca 0 sau timeout=0
+                result = self._espnow.recv(0) 
                 if result is not None:  
                     mac, data = result
                     try:
                         cmd = json.loads(data.decode("utf-8"))
                         self._handle_espnow_command(cmd)
-                    except ValueError:
-                        pass
-            except OSError:
-                pass
+                    except ValueError as e:
+                        print(f"[{self._node_id}] Failed to parse command: {e}")
+            except OSError as e:
+                print(f"[{self._node_id}] ESP-NOW recv error: {e}")
 
             await asyncio.sleep_ms(10)
 
@@ -111,6 +111,7 @@ class SlaveNode(SecuriFiNode):
                 await asyncio.sleep_ms(100 * (attempt + 1))
 
         self._tx_failed += 1
+        print(f"[{self._node_id}] Failed to send after {ESPNOW_MAX_RETRIES} attempts, total failures: {self._tx_failed}")
 
 
     def _build_payload(self, reading) -> bytes:
@@ -138,5 +139,4 @@ class SlaveNode(SecuriFiNode):
         return bytes(int(p, 16) for p in parts)
 
     
-    def _enter_deep_sleep(self) -> None:
-        pass # TODO
+    

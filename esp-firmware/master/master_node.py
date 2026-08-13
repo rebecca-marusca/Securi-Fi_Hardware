@@ -21,7 +21,6 @@ class MasterNode(SecuriFiNode):
         self._slave_macs = slave_macs or []
         self._espnow = None
         self._mqtt = None
-        self._sensor_flat = None # TODO in securifi node??
 
         self._slave_states: dict = {}
         for i, mac in enumerate(self._slave_macs):
@@ -52,8 +51,9 @@ class MasterNode(SecuriFiNode):
                 mac_bytes = self._parse_mac(mac)
                 self._espnow.add_peer(mac_bytes, channel=ESPNOW_CHANNEL)
 
-            print(f"[{self._node_id}] ESP_NOW initialized, {len(self._slave_macs)} slave peers registered")
+            print(f"[{self._node_id}] ESP-NOW initialized, {len(self._slave_macs)} slave peers registered")
         except ImportError:
+            print(f"[{self._node_id}] ESP-NOW not available (MycroPython?)")
             self._espnow = None
 
     async def _loop_espnow_rx(self) -> None:
@@ -67,8 +67,8 @@ class MasterNode(SecuriFiNode):
                 if result is not None:
                     mac, data = result
                     self._handle_slave_packet(mac, data)
-            except OSError:
-                pass
+            except OSError as e:
+                print(f"[{self._node_id}] ESP-NOW recv error: {e}")
 
             await asyncio.sleep_ms(10)
 
@@ -82,8 +82,8 @@ class MasterNode(SecuriFiNode):
             payload = json.loads(data.decode("utf-8"))
             state.reading = payload
             state.last_seen_ms = time.ticks_ms()
-        except (ValueError, UnicodeError):
-            pass
+        except (ValueError, UnicodeError) as e:
+            print(f"[{self._node_id}] Failed to parse slave packet from {mac}: {e}")
 
 
     # mqtt:
@@ -138,8 +138,8 @@ class MasterNode(SecuriFiNode):
                     case "reboot_slave":
                         target = data.get("node_id")
                         self._send_espnow_to(target, {"cmd": "reboot"})
-            except ValueError:
-                pass
+            except ValueError as e:
+                print(f"[{self._node_id}] Failed to subscribe to cmd topic: {e}")
 
         if self._mqtt is None:
             return 
@@ -297,17 +297,26 @@ class MasterNode(SecuriFiNode):
 
     def _broadcast_espnow(self, cmd: dict) -> None:
         payload = json.dumps(cmd).encode("utf-8")
-        for mac_bytes in self._slave_states:
+        for mac_bytes, state in self._slave_states.items():
             try:
                 self._espnow.send(mac_bytes, payload)
-            except OSError:
-                pass # TODO cv print-uri
+            except OSError as e:
+                print(f"[{self._node_id}] Failed to send {cmd} to {state.node_id}: {e}")
 
-    def _send_espnow_to(self, target: str, payload: dict) -> None: # target e numeric
+    def _send_espnow_to(self, target: str, cmd: dict) -> None: 
         try:
-            self._espnow.send(self._parse_mac(SLAVE_MACS[int(target) - 1]), payload) # TODO: errors for everything that can go wrong with macs !!! FLASHING ORDER VS MAC ID
-        except OSError:
-            pass # TODO
+            index = int(target) - 1
+            if index < 0 or index >= len(SLAVE_MACS):
+                print(f"[{self.node_id}] Invalid slave target: {target}, known slaves: {len(SLAVE_MACS)}")
+                return
+
+            mac_bytes = self._parse_mac(SLAVE_MACS[index])
+            payload = json.dumps(cmd).encode("utf-8")
+            self._espnow.send(mac_bytes, payload)
+
+            print(f"[{self._node_id}] Sent {cmd} to slave_{target}")
+        except (OSError, ValueError, IndexError) as e:
+            print(f"[{self._node_id}] Failed to send slave {target}: {e}")
 
 
-# test
+

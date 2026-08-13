@@ -108,6 +108,9 @@ class SecuriFiNode:
         self._running = False
         self._mq2.start_warmup()
 
+        self._sensor_flat: bool = False
+        self._mq2_history: list = []
+
 
     # Outside functions:
     @property
@@ -264,5 +267,19 @@ class SecuriFiNode:
 
         time.sleep(1)
         machine.reset()
+
+    def _enter_deep_sleep(self) -> None: # TODO: De verificat si de testat, asta e kill switch-ul
+        print(f"[{self._node_id}] Entering deep sleep, weke via the pysical button only")
+        self.stop()
+        time.sleep(0.5)
+
+        try:
+            import machine
+            wake_pin = machine.Pin(0, machine.Pin.IN, machine.Pin.PULL_UP) # TODO decis butonul si modul
+            machine.wake_on_ext0(pin=wake_pin, level=0)
+            machine.deepsleep()
+        except (OSError, ImportError) as e:
+            print(f"[{self._node_id}] Failed to enter deepsleep: {e}")
+
 
 # TODO: implementat battery % 
