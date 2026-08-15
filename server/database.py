@@ -248,4 +248,3 @@ def save_snapshot(home_id: str, packages: list) -> str:
 
     print(f"[DB]: Manual snapshot saved: {session_id} at the home {home_id}")
     return session_id
-
