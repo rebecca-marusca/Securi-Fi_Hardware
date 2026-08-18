@@ -183,7 +183,6 @@ class SecuriFiNode:
 
             await asyncio.sleep_ms(SENSOR_POLL_MS)
 
-
     async def _loop_watchdog(self) -> None:
         await asyncio.sleep(30) # pauza magica :)
 
