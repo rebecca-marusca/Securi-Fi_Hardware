@@ -160,25 +160,29 @@ class SecuriFiNode:
     async def _loop_sensor_poll(self) -> None:
         while self._running:
             if self._detector.is_calibrated:
-                movement_pct, state = self._detector.get_reading()
-                mq2_reading = self._mq2.read()
+                try:
+                    movement_pct, state = self._detector.get_reading()
+                    mq2_reading = self._mq2.read()
 
-                self._current_reading = NodeReading(
-                    node_id=self._node_id,
-                    timestamp=int(time.time()),
-                    movement_pct=movement_pct,
-                    state=state,
-                    gas_detected=mq2_reading.gas_detected,
-                    raw_mq2_reading=mq2_reading.raw_value,
-                    is_calibrated=True,
-                    packets_sent=self._traffic_gen.packets_sent if self._traffic_gen else 0,
-                    packets_dropped=self._traffic_gen.packets_dropped if self._traffic_gen else 0,
-                    pps=self._tg_rate
-                )
+                    self._current_reading = NodeReading(
+                        node_id=self._node_id,
+                        timestamp=int(time.time()),
+                        movement_pct=movement_pct,
+                        state=state,
+                        gas_detected=mq2_reading.gas_detected,
+                        raw_mq2_reading=mq2_reading.raw_value,
+                        is_calibrated=True,
+                        packets_sent=self._traffic_gen.packets_sent if self._traffic_gen else 0,
+                        packets_dropped=self._traffic_gen.packets_dropped if self._traffic_gen else 0,
+                        pps=self._tg_rate
+                    )
 
-                self._last_valid_reading_ts = time.time()
+                    self._last_valid_reading_ts = time.time()
+                except Exception as e:
+                    print(f"[{self._node_id}] Sensor poll error (recoverable): {e}")
 
             await asyncio.sleep_ms(SENSOR_POLL_MS)
+
 
     async def _loop_watchdog(self) -> None:
         await asyncio.sleep(30) # pauza magica :)

@@ -39,21 +39,23 @@ class SlaveNode(SecuriFiNode):
         except ImportError:
             print("Asigurati-va ca sunteti pe MicroPython :))")
             self._espnow = None
+        except (RuntimeError, OSError) as e:
+            print(f"[{self._node_id}] ESP-NOW init failed: {e}")
+            self._soft_reboot(self.ERR_ESPNOW_FAILED)
 
     def _handle_espnow_command(self, cmd: dict) -> None:
         command = cmd.get("cmd")
 
-        match command: 
-            case "arm":
-                print(f"[{self._node_id}] ARMED")
-                self._state = self.STATE_ARMED
-            case "standby":
-                print(f"[{self._node_id}] STANDBY")
-                self._state = self.STATE_STANDBY
-            case "sleep":
-                self._enter_deep_sleep()
-            case "reboot":
-                self._soft_reboot("master_command")
+        if command == "arm":
+            print(f"[{self._node_id}] ARMED")
+            self._state = self.STATE_ARMED
+        elif command == "standby":
+            print(f"[{self._node_id}] STANDBY")
+            self._state = self.STATE_STANDBY
+        elif command == "sleep":
+            self._enter_deep_sleep()
+        elif command == "reboot":
+            self._soft_reboot("master_command")
 
 
 

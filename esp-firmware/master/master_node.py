@@ -55,6 +55,9 @@ class MasterNode(SecuriFiNode):
         except ImportError:
             print(f"[{self._node_id}] ESP-NOW not available (MycroPython?)")
             self._espnow = None
+        except OSError as e:
+            print(f"[{self._node_id}] ESP-NOW init failed: {e}")
+            self._soft_reboot(self.ERR_ESPNOW_FAILED)
 
     async def _loop_espnow_rx(self) -> None:
         while self._running:
@@ -106,8 +109,11 @@ class MasterNode(SecuriFiNode):
         print(f"[{self._node_id}] Starting MQTT publish loop")
 
         while self._running:
+            if self._mqtt is None:
+                self._init_mqtt()
+
             own_reading = self.get_reading()
-            if own_reading is not None:
+            if own_reading is not None and self._mqtt is not None:
                 package = self._build_package(own_reading)
                 payload = json.dumps(package).encode("utf-8")
                 await self._mqtt_publish(payload)
@@ -122,20 +128,19 @@ class MasterNode(SecuriFiNode):
                 data = json.loads(msg.decode("utf-8"))
                 command = data.get("cmd")
 
-                match command:
-                    case "arm":
+                if command == "arm":
                         self._armed = True
                         self._broadcast_espnow({"cmd": "arm"})
-                    case "standby":
+                elif command == "standby":
                         self._armed = False
                         self._broadcast_espnow({"cmd": "standby"})
-                    case "sleep":
+                elif command == "sleep":
                         self._broadcast_espnow({"cmd": "sleep"})
-                    case "reboot":
+                elif command == "reboot":
                         self._broadcast_espnow({"cmd": "reboot"})
                         time.sleep(1)
                         self._soft_reboot("server_command")
-                    case "reboot_slave":
+                elif command == "reboot_slave":
                         target = data.get("node_id")
                         self._send_espnow_to(target, {"cmd": "reboot"})
             except ValueError as e:
@@ -315,7 +320,7 @@ class MasterNode(SecuriFiNode):
             self._espnow.send(mac_bytes, payload)
 
             print(f"[{self._node_id}] Sent {cmd} to slave_{target}")
-        except (OSError, ValueError, IndexError) as e:
+        except (OSError, ValueError, IndexError, TypeError) as e:
             print(f"[{self._node_id}] Failed to send slave {target}: {e}")
 
 
