@@ -16,8 +16,8 @@ class SlaveState:
 
 
 class MasterNode(SecuriFiNode):
-    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, slave_macs: list = None, mq2_pin: int = 0, mq2_threshold: int = 1500, traffic_rate_pps: int = 20):
-        super().__init__(node_id=node_id, wifi_ssid=wifi_ssid, wifi_password=wifi_password, mq2_pin=mq2_pin, mq2_threshold=mq2_threshold, traffic_rate_pps=traffic_rate_pps)
+    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, slave_macs: list = None, mq2_pin: int = 0, mq2_threshold: int = 1500, battery_pin: int = 3, traffic_rate_pps: int = 20):
+        super().__init__(node_id=node_id, wifi_ssid=wifi_ssid, wifi_password=wifi_password, mq2_pin=mq2_pin, mq2_threshold=mq2_threshold, battery_pin=battery_pin, traffic_rate_pps=traffic_rate_pps)
         self._slave_macs = slave_macs or []
         self._espnow = None
         self._mqtt = None
@@ -136,6 +136,8 @@ class MasterNode(SecuriFiNode):
                         self._broadcast_espnow({"cmd": "standby"})
                 elif command == "sleep":
                         self._broadcast_espnow({"cmd": "sleep"})
+                elif command == "sleep_master":
+                        self._enter_master_deep_sleep(sleep_ms=10000)
                 elif command == "reboot":
                         self._broadcast_espnow({"cmd": "reboot"})
                         time.sleep(1)
@@ -323,5 +325,11 @@ class MasterNode(SecuriFiNode):
         except (OSError, ValueError, IndexError, TypeError) as e:
             print(f"[{self._node_id}] Failed to send slave {target}: {e}")
 
-
+    def _enter_master_deep_sleep(self, sleep_ms: int) -> None:
+        if self._mqtt is not None:
+            try:
+                self._mqtt.disconnect()
+            except OSError:
+                pass
+        self._enter_deep_sleep(sleep_ms=sleep_ms)
 

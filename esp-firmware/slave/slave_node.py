@@ -6,8 +6,8 @@ from config import MASTER_MAC, ESPNOW_TX_INTERVAL_MS, ESPNOW_CHANNEL, ESPNOW_MAX
 
 
 class SlaveNode(SecuriFiNode):
-    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, master_mac: str = MASTER_MAC, mq2_pin: int = 2, mq2_threshold: int = 1500, traffic_rate_pps: int = 20):
-        super().__init__(node_id=node_id, wifi_ssid=wifi_ssid, wifi_password=wifi_password, mq2_pin=mq2_pin, mq2_threshold=mq2_threshold, traffic_rate_pps=traffic_rate_pps)
+    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, master_mac: str = MASTER_MAC, mq2_pin: int = 2, mq2_threshold: int = 1500, battery_pin: int = 3, traffic_rate_pps: int = 20):
+        super().__init__(node_id=node_id, wifi_ssid=wifi_ssid, wifi_password=wifi_password, mq2_pin=mq2_pin, mq2_threshold=mq2_threshold, battery_pin=battery_pin, traffic_rate_pps=traffic_rate_pps)
 
         self._master_mac = master_mac
         self._master_mac_bytes = self._parse_mac(self._master_mac) if master_mac else None

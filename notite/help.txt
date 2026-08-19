@@ -1,0 +1,31 @@
+you can find file structure in me
+
+for creating venv: (keep in mind you need phyton 3.12)
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+
+Deployment flow: (be sure to change in config the mqtt broker to your ip, as well with the wifi if you dont want to change your hotspot pasword and name)
+
+flash firmware: (replace x with the port number for that esp, can see it in device manager at ports)
+esptool --chip esp32c6 --port COMX --baud 460800 erase-flash
+esptool --chip esp32c6 --port COMX --baud 460800 write-flash -z 0x0 ESP32_CSI_C6.bin
+
+Deploy: (replace x with the slave's number, from 1 to 3)
+python me deploy --node master
+python me deploy --node slave --id slave-id x
+
+for readins test: (the same com you used for flash)
+mpremote connect COMX repl
+(ctr d for soft reboot)
+
+flow for mqtt: (you can download it from mosquitto.org/downloads, be sure it is for your operating system)
+turn on hotspot (be sure to be the same name and pasword as in configs)
+start mosqiutto as admin: net start mosquitto
+run a sub from mosquitto folder: mosquitto_sub -h [ip] -p 1883 -t "securifi/master" -v (change the ip with yours, dont need the brackets)
+
+for grapher:
+in the root folder run python grapher, you might have to change the mqtt broker for your ip
+
+tips:
+you can find your ip by turning on hotspot and runing ipconfig in cmd, you will find it at local area connection* 4  at ipv4
