@@ -331,7 +331,7 @@ def flash_firmware(args):
                 esptool.main(flash_args)
                 print(f"\n{Fore.GREEN}✅ Firmware flashed successfully!{Style.RESET_ALL}\n")
                 print(f"{Fore.CYAN}Next steps:{Style.RESET_ALL}")
-                print(f"  ./me.py deploy --node master   (or --node slave --slave-id 1)")
+                print(f"  ./me.py deploy --node master   (or --node slave --slave_id 1)")
                 print(f"  ./me.py run --node master\n")
                 return
             except Exception as e:
@@ -423,7 +423,7 @@ def deploy_code(args):
         subprocess.run(['mpremote', 'connect', port, 'cp', str(src), f':{name}'],
                         check=True, capture_output=True)
 
-    # node_id.txt — for slaves, optionally override with --slave-id so the
+    # node_id.txt — for slaves, optionally override with --slave_id so the
     # same tracked file can be reused across 3 physical boards.
     node_id_src = code_dir / "node_id.txt"
     if args.node == "slave" and args.slave_id:
@@ -585,7 +585,7 @@ Examples:
 
   # Deploy slave board #2 (reuses slave_node/slave/node_id.txt as a template,
   # overriding its content to "slave_2" for this specific board)
-  ./me.py deploy --node slave --slave-id 2
+  ./me.py deploy --node slave --slave_id 2
 
   # Run the deployed firmware and see live logs
   ./me.py run
@@ -607,7 +607,7 @@ Examples:
     deploy_p.add_argument('--node', choices=['master', 'slave'], required=True,
                            help='Which node type to deploy')
     deploy_p.add_argument('--port', help='Serial port (auto-detected if omitted)')
-    deploy_p.add_argument('--slave-id', choices=['1', '2', '3'],
+    deploy_p.add_argument('--slave_id', choices=['1', '2', '3'],
                            help='Override node_id.txt to slave_<id> (slave only, per physical board)')
 
     run_p = sub.add_parser('run', help='Run main.py on the board and stream logs')
