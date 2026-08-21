@@ -83,10 +83,21 @@ class MasterNode(SecuriFiNode):
 
         try:
             payload = json.loads(data.decode("utf-8"))
-            state.reading = payload
-            state.last_seen_ms = time.ticks_ms()
         except (ValueError, UnicodeError) as e:
             print(f"[{self._node_id}] Failed to parse slave packet from {mac}: {e}")
+
+        if payload.get("cmd") == "state_request":
+            response = "arm" if self._state == self.STATE_ARMED else "standby"
+            try:
+                self._espnow.send(mac, json.dumps({"cmd": response}).encode("utf-8"))
+                print(f"[{self._node_id}] Answered state_request from {state.node_id}: {response}")
+            except OSError as e:
+                print(f"[{self._node_id}] Failed to answer state_request from {state.node_id}: {e}")
+                return
+        
+        state.reading = payload
+        state.last_seen_ms = time.ticks_ms()
+        
 
 
     # mqtt:
@@ -109,8 +120,9 @@ class MasterNode(SecuriFiNode):
         print(f"[{self._node_id}] Starting MQTT publish loop")
 
         while self._running:
-            if self._mqtt is None:
-                self._init_mqtt()
+            if self._state == self.STATE_ARMED:
+                if self._mqtt is None:
+                    self._init_mqtt()
 
             own_reading = self.get_reading()
             if own_reading is not None and self._mqtt is not None:
@@ -130,14 +142,32 @@ class MasterNode(SecuriFiNode):
 
                 if command == "arm":
                         self._armed = True
+                        self._state = self.STATE_ARMED
+                        self._resume_sensing()
                         self._broadcast_espnow({"cmd": "arm"})
+                elif command == "arm_target":
+                        target = data.get("node_id")
+                        if target == "master":
+                            self._state = self.STATE_ARMED
+                        else:
+                            self._send_espnow_to(target, {"cmd": "arm"})
                 elif command == "standby":
                         self._armed = False
+                        self._state = self.STATE_STANDBY
+                        self._pause_sensing()
                         self._broadcast_espnow({"cmd": "standby"})
+                elif command == "standby_target":
+                        target = data.get("node_id")
+                        if target == "master":
+                            self._state = self.STATE_STANDBY
+                        else:
+                            self._send_espnow_to(target, {"cmd": "standby"})
                 elif command == "sleep":
                         self._broadcast_espnow({"cmd": "sleep"})
-                elif command == "sleep_master":
-                        self._enter_master_deep_sleep(sleep_ms=10000)
+                        self._enter_master_deep_sleep()
+                elif command == "sleep_slave":
+                        target = data.get("node_id")
+                        self._send_espnow_to(target, {"cmd": "sleep"})
                 elif command == "reboot":
                         self._broadcast_espnow({"cmd": "reboot"})
                         time.sleep(1)

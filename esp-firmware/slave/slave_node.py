@@ -16,12 +16,11 @@ class SlaveNode(SecuriFiNode):
         self._tx_success = 0
         self._tx_failed = 0
 
-        self._state = self.STATE_CALIBRATING
 
     # hook:
     def _subclass_coroutines(self) -> list:
         self._init_espnow()
-        return [self._loop_espnow_tx()]
+        return [self._loop_espnow_tx(), self._loop_espnow_rx(), self._loop_request_state()]
 
 
     # esp-now:
@@ -49,9 +48,11 @@ class SlaveNode(SecuriFiNode):
         if command == "arm":
             print(f"[{self._node_id}] ARMED")
             self._state = self.STATE_ARMED
+            self._resume_sensing()
         elif command == "standby":
             print(f"[{self._node_id}] STANDBY")
             self._state = self.STATE_STANDBY
+            self._pause_sensing()
         elif command == "sleep":
             self._enter_deep_sleep()
         elif command == "reboot":
@@ -64,7 +65,6 @@ class SlaveNode(SecuriFiNode):
         while not self._detector.is_calibrated:
             await asyncio.sleep_ms(200)
 
-        self._state = self.STATE_STANDBY
         print(f"[{self._node_id}] Calibrated, entering standby")
 
         while self._running:
@@ -97,6 +97,23 @@ class SlaveNode(SecuriFiNode):
 
             await asyncio.sleep_ms(10)
 
+    async def _loop_request_state(self) -> None:
+        if self._espnow is None or self._master_mac_bytes is None:
+            return
+
+        for attempt in range(3):
+            try:
+                payload = json.dumps({"cmd": "state_request"}).encode("utf-8")
+                self._espnow.send(self._master_mac_bytes, payload)
+                print(f"[{self._node_id}] Requested current state from master (attempt {attempt + 1})")
+            except OSError as e:
+                print(f"[{self._node_id}] Failed to request state: {e}")
+
+            await asyncio.sleep_ms(1000)
+
+            if self._state == self.STATE_ARMED:
+                return
+        
     async def _send_with_retry(self, payload: bytes) -> None:
         if self._espnow is None:
             return

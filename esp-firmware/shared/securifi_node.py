@@ -171,6 +171,7 @@ class SecuriFiNode:
         self._node_id = node_id
         self._wifi_ssid = wifi_ssid
         self._wifi_password = wifi_password
+        self._state = self.STATE_BOOT
 
         self._detector = MVSDetector()
         self._mq2 = MQ2Sensor(pin=mq2_pin, threshold=mq2_threshold)
@@ -210,13 +211,13 @@ class SecuriFiNode:
         router_ip = wlan.ifconfig()[2]
         router_mac = self._resolve_router_mac(router_ip)
 
-        self._traffic_gen = TrafficGenerator(target_ip=router_ip, rate_pps=self._tg_rate)
-        _thread.start_new_thread(self._traffic_gen.run, ())
-
-        self._csi_capture = CSICapture(detector=self._detector, router_mac=router_mac)
-        self._csi_capture.start()
-        _thread.start_new_thread(self._csi_capture.run, ())
+        self._start_sensing()
         self._wait_for_calibration()
+
+        self._state = self.STATE_STANDBY
+        print(f"[{self._node_id}] Entering standby, pausing sensing")
+        self._pause_sensing()
+        
 
         asyncio.run(self._main_loop())
 
@@ -227,6 +228,23 @@ class SecuriFiNode:
         if self._csi_capture:
             self._csi_capture.stop()
 
+    def _start_sensing(self) -> None:
+        self._traffic_gen = TrafficGenerator(target_ip=self._router_ip, rate_pps=self._tg_rate)
+        _thread.start_new_thread(self._traffic_gen.run, ())
+
+        self._csi_capture = CSICapture(detector=self._detector, router_mac=self._router_mac)
+        self._csi_capture.start()
+        _thread.start_new_thread(self._csi_capture.run, ())
+
+    def _pause_sensing(self) -> None:
+        if self._traffic_gen:
+            self._traffic_gen.stop()
+        if self._csi_capture:
+            self._csi_capture.stop()
+
+    def _resume_sensing(self) -> None:
+        print(f"[{self._node_id}] Resuming sensing")
+        self._start_sensing()
 
     # async:
     async def _main_loop(self) -> None:
@@ -238,7 +256,7 @@ class SecuriFiNode:
 
     async def _loop_sensor_poll(self) -> None:
         while self._running:
-            if self._detector.is_calibrated:
+            if self._state == self.STATE_ARMED and self._detector.is_calibrated:
                 try:
                     movement_pct, state = self._detector.get_reading()
                     mq2_reading = self._mq2.read()
@@ -332,6 +350,7 @@ class SecuriFiNode:
         return None
 
     def _wait_for_calibration(self) -> None:
+        self._state = self.STATE_CALIBRATING
         print(f"[{self._node_id}] Calibrating...")
         start = time.time()
 
@@ -346,6 +365,7 @@ class SecuriFiNode:
 
             time.sleep(0.5)
 
+        self._state = self.STATE_STANDBY
         print(f"[{self._node_id}] Calibrated in {int(time.time() - start)}s")
 
     def _soft_reboot(self, reason: str) -> None:
