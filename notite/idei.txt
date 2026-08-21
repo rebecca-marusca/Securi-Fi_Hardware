@@ -1,1 +1,4 @@
 daca ii in infinite rebot nu uita de hotspot
+    - putem muta shared in afara la master_node si slave_node si sa modificam me-ul incat sa dea flash cu shared-ul afara incat sa putem imita
+structura pe github fara sa dublam shared
+    - script care sa dea flash automat si unul care sa porneasca tot ce trebuie pornit atunci cand vrem sa testam ceva
