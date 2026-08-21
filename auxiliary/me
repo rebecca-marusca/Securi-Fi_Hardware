@@ -5,11 +5,11 @@ me.py — SecuriFi firmware CLI (adapted from ESPectre's ./me tool)
 Handles flashing the CSI-enabled MicroPython firmware and deploying/running
 the SecuriFi master/slave node code, matching this repo layout:
 
-Securi-Fi_Node/
-├── me.py                      <-- this file lives HERE (repo root)
+Securi-Fi_Nodes/
+├── me.py
 ├── grapher.py
 ├── venv/
-├── firmware/                  <-- downloaded/cached .bin files (auto-created)
+├── firmware/
 ├── slave_node/
 │   ├── shared/
 │   │   ├── csi_capture.py
@@ -20,28 +20,25 @@ Securi-Fi_Node/
 │   └── slave/
 │       ├── config.py
 │       ├── main.py
-│       ├── slave_node.py
-│       └── node_id.txt
+│       └── slave_node.py
 └── master_node/
-    ├── shared/  (same 5 files as above)
+    ├── shared/
     └── master/
         ├── config.py
         ├── main.py
-        ├── master_node.py
-        └── node_id.txt
+        └── master_node.py
 
-On-device layout produced by `deploy` (for either node type):
+On-device layout produced by `deploy`:
+
     /main.py
     /config.py
-    /master_node.py   (or /slave_node.py)
+    /master_node.py
     /node_id.txt
-    /shared/__init__.py     <-- generated automatically, makes `shared` a package
+    /shared/__init__.py
     /shared/*.py
-
-This matches the imports used in the code, e.g.:
-    from shared.securifi_node import SecuriFiNode, NodeReading
-    from config import MQTT_BROKER, ...
 """
+
+# va anunt de pe acuma, nu am depus efortul sa inteleg ce se actually intampla in me, e o combinatie de especture + calude + chatgpt + visuri si sperante umane
 
 import os
 import sys
@@ -51,27 +48,65 @@ import tempfile
 import subprocess
 from pathlib import Path
 
-FIRMWARE_RELEASE_URL = "https://github.com/francescopace/micropython-esp32-csi/releases/download/v1.0.0-rc7"
+
+# Always use the project's virtual environment.
+# This lets `python me.py ...` work without manually activating venv first.
+REPO_ROOT = Path(__file__).resolve().parent
+VENV_PYTHON = REPO_ROOT / "venv" / "Scripts" / "python.exe"
+
+if VENV_PYTHON.exists():
+    try:
+        current_python = Path(sys.executable).resolve()
+
+        if current_python != VENV_PYTHON.resolve():
+            os.execv(
+                str(VENV_PYTHON),
+                [
+                    str(VENV_PYTHON),
+                    str(Path(__file__).resolve()),
+                    *sys.argv[1:]
+                ]
+            )
+
+    except OSError as e:
+        print(f"Couldn't start the venv: {e}")
+        sys.exit(1)
+
+
+FIRMWARE_RELEASE_URL = (
+    "https://github.com/francescopace/micropython-esp32-csi/"
+    "releases/download/v1.0.0-rc7"
+)
+
 FIRMWARE_NAME_PREFIX = "ESP32_CSI_"
 
 FIRMWARE_HASHES = {
-    'ESP32_CSI.bin': '632e9898f283dfe473bc75d14e40c9b6802f7997cbab600be3502fe6dc5a5651',
-    'ESP32_CSI_C3.bin': '5613e2fdfb1541b1b2ad20e5ac424f8ffaa363f7b44d2121cf33ff9548d16c98',
-    'ESP32_CSI_C5.bin': '66a9a9a16fb67baa248167f6928e63b12b3010780476c23ea1e78d30b3851f0d',
-    'ESP32_CSI_C6.bin': '1f29e11c82cce53da1a47d5b930bedc4446b477d5819fc7916c70d1295438b77',
-    'ESP32_CSI_S3.bin': 'e4a07da0b079425b642fe80311b56731a9ea8a0165e67d1df090a051e43553ee',
+    'ESP32_CSI.bin':
+        '632e9898f283dfe473bc75d14e40c9b6802f7997cbab600be3502fe6dc5a5651',
+
+    'ESP32_CSI_C3.bin':
+        '5613e2fdfb1541b1b2ad20e5ac424f8ffaa363f7b44d2121cf33ff9548d16c98',
+
+    'ESP32_CSI_C5.bin':
+        '66a9a9a16fb67baa248167f6928e63b12b3010780476c23ea1e78d30b3851f0d',
+
+    'ESP32_CSI_C6.bin':
+        '1f29e11c82cce53da1a47d5b930bedc4446b477d5819fc7916c70d1295438b77',
+
+    'ESP32_CSI_S3.bin':
+        'e4a07da0b079425b642fe80311b56731a9ea8a0165e67d1df090a051e43553ee',
 }
+
 
 try:
     from colorama import init, Fore, Style
 except ImportError:
-    print("Missing dependency 'colorama'. Install with: pip install colorama")
+    print("Missing dependency: colorama")
+    print("Install it with: pip install colorama")
     sys.exit(1)
 
 init()
 
-# Repo root = directory this script lives in.
-REPO_ROOT = Path(__file__).resolve().parent
 
 NODE_DIRS = {
     "master": {
@@ -79,6 +114,7 @@ NODE_DIRS = {
         "code_subdir": "master",
         "node_module": "master_node.py",
     },
+
     "slave": {
         "root": REPO_ROOT / "slave_node",
         "code_subdir": "slave",
@@ -88,22 +124,28 @@ NODE_DIRS = {
 
 
 # ============================================================================
-# Serial port / chip detection (unchanged from ESPectre tooling)
+# Serial port / chip detection
 # ============================================================================
 
 def detect_serial_ports():
     try:
         import serial.tools.list_ports
     except ImportError:
-        print(f"{Fore.RED}❌ pyserial not found. Install it with:{Style.RESET_ALL}")
-        print("   pip install pyserial")
+        print(f"{Fore.RED}pyserial is not installed.{Style.RESET_ALL}")
+        print("Install it with: pip install pyserial")
         sys.exit(1)
 
     ports = []
+
     for port in serial.tools.list_ports.comports():
         desc_lower = port.description.lower()
-        if any(k in desc_lower for k in ['usb', 'serial', 'uart', 'cp210', 'ch340', 'ftdi']):
+
+        if any(
+            k in desc_lower
+            for k in ['usb', 'serial', 'uart', 'cp210', 'ch340', 'ftdi']
+        ):
             ports.append(port.device)
+
     return ports
 
 
@@ -111,31 +153,46 @@ def get_serial_port(port_arg):
     if port_arg:
         return port_arg
 
-    print(f"{Fore.YELLOW}🔍 Auto-detecting serial ports...{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW}Looking for a serial port...{Style.RESET_ALL}")
+
     ports = detect_serial_ports()
 
     if len(ports) == 0:
-        print(f"{Fore.RED}❌ No serial ports found{Style.RESET_ALL}")
-        print(f"\n{Fore.YELLOW}Connect your ESP32-C6 board and try again.{Style.RESET_ALL}")
+        print(f"{Fore.RED}No serial ports found.{Style.RESET_ALL}")
+        print("Connect the ESP32 and try again.")
         sys.exit(1)
+
     elif len(ports) == 1:
-        print(f"{Fore.GREEN}✅ Auto-detected port: {ports[0]}{Style.RESET_ALL}\n")
+        print(f"{Fore.GREEN}Using port {ports[0]}.{Style.RESET_ALL}\n")
         return ports[0]
+
     else:
         print(f"{Fore.YELLOW}Multiple serial ports found:{Style.RESET_ALL}")
+
         for i, port in enumerate(ports, 1):
             print(f"  {i}. {port}")
+
         print()
+
         try:
-            choice = int(input(f"{Fore.CYAN}Select port (1-{len(ports)}): {Style.RESET_ALL}"))
+            choice = int(
+                input(
+                    f"{Fore.CYAN}"
+                    f"Select port (1-{len(ports)}): "
+                    f"{Style.RESET_ALL}"
+                )
+            )
+
             if 1 <= choice <= len(ports):
                 selected = ports[choice - 1]
-                print(f"{Fore.GREEN}✅ Selected: {selected}{Style.RESET_ALL}\n")
+                print(f"{Fore.GREEN}Using port {selected}.{Style.RESET_ALL}\n")
                 return selected
-            print(f"{Fore.RED}Invalid choice{Style.RESET_ALL}")
+
+            print(f"{Fore.RED}Invalid port selection.{Style.RESET_ALL}")
             sys.exit(1)
+
         except (ValueError, KeyboardInterrupt):
-            print(f"\n{Fore.RED}Cancelled{Style.RESET_ALL}")
+            print(f"\n{Fore.RED}Cancelled.{Style.RESET_ALL}")
             sys.exit(1)
 
 
@@ -146,62 +203,104 @@ def detect_chip_type(port):
         return None
 
     esp = None
+
     try:
-        print(f"{Fore.YELLOW}🔍 Detecting chip type...{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Detecting chip...{Style.RESET_ALL}")
+
         esp = esptool.get_default_connected_device(
-            serial_list=[port], port=port, connect_attempts=3, initial_baud=115200
+            serial_list=[port],
+            port=port,
+            connect_attempts=3,
+            initial_baud=115200
         )
+
         chip_name = esp.CHIP_NAME
 
         if 'ESP32-S3' in chip_name:
-            print(f"{Fore.GREEN}✅ Detected: ESP32-S3{Style.RESET_ALL}\n")
+            print(f"{Fore.GREEN}Detected ESP32-S3.{Style.RESET_ALL}\n")
             return 's3'
+
         elif 'ESP32-C6' in chip_name:
-            print(f"{Fore.GREEN}✅ Detected: ESP32-C6{Style.RESET_ALL}\n")
+            print(f"{Fore.GREEN}Detected ESP32-C6.{Style.RESET_ALL}\n")
             return 'c6'
+
         elif 'ESP32-C5' in chip_name:
-            print(f"{Fore.GREEN}✅ Detected: ESP32-C5{Style.RESET_ALL}\n")
+            print(f"{Fore.GREEN}Detected ESP32-C5.{Style.RESET_ALL}\n")
             return 'c5'
+
         elif 'ESP32-C3' in chip_name:
-            print(f"{Fore.GREEN}✅ Detected: ESP32-C3{Style.RESET_ALL}\n")
+            print(f"{Fore.GREEN}Detected ESP32-C3.{Style.RESET_ALL}\n")
             return 'c3'
+
         elif chip_name == 'ESP32':
-            print(f"{Fore.GREEN}✅ Detected: ESP32{Style.RESET_ALL}\n")
+            print(f"{Fore.GREEN}Detected ESP32.{Style.RESET_ALL}\n")
             return 'esp32'
+
         else:
-            print(f"{Fore.YELLOW}⚠️  Unknown chip: {chip_name}{Style.RESET_ALL}\n")
+            print(
+                f"{Fore.YELLOW}"
+                f"Unknown chip: {chip_name}"
+                f"{Style.RESET_ALL}\n"
+            )
             return None
+
     except Exception as e:
-        print(f"{Fore.YELLOW}⚠️  Could not detect chip type: {e}{Style.RESET_ALL}")
+        print(
+            f"{Fore.YELLOW}"
+            f"Couldn't detect chip: {e}"
+            f"{Style.RESET_ALL}"
+        )
         return None
+
     finally:
         if esp and hasattr(esp, '_port') and esp._port:
             try:
                 esp._port.close()
             except Exception:
                 pass
+
         time.sleep(1)
 
 
 def prompt_chip_type():
-    print(f"\n{Fore.CYAN}Select your ESP32 chip type (project default: ESP32-C6):{Style.RESET_ALL}")
-    print("  1. ESP32 (original)")
+    print(f"\n{Fore.CYAN}Couldn't detect the chip.{Style.RESET_ALL}")
+    print("Select the chip type:")
+    print("  1. ESP32")
     print("  2. ESP32-C3")
     print("  3. ESP32-S3")
     print("  4. ESP32-C5")
     print("  5. ESP32-C6")
     print()
+
     try:
-        choice = input(f"{Fore.CYAN}Select chip (1-5) [5]: {Style.RESET_ALL}").strip() or "5"
-        mapping = {'1': 'esp32', '2': 'c3', '3': 's3', '4': 'c5', '5': 'c6'}
+        choice = (
+            input(
+                f"{Fore.CYAN}"
+                f"Chip [5]: "
+                f"{Style.RESET_ALL}"
+            ).strip()
+            or "5"
+        )
+
+        mapping = {
+            '1': 'esp32',
+            '2': 'c3',
+            '3': 's3',
+            '4': 'c5',
+            '5': 'c6'
+        }
+
         chip = mapping.get(choice)
+
         if chip:
-            print(f"{Fore.GREEN}✅ Selected: {chip.upper()}{Style.RESET_ALL}\n")
+            print(f"{Fore.GREEN}Using {chip.upper()}.{Style.RESET_ALL}\n")
             return chip
-        print(f"{Fore.RED}Invalid choice{Style.RESET_ALL}")
+
+        print(f"{Fore.RED}Invalid chip selection.{Style.RESET_ALL}")
         return None
+
     except (KeyboardInterrupt, EOFError):
-        print(f"\n{Fore.RED}Cancelled{Style.RESET_ALL}")
+        print(f"\n{Fore.RED}Cancelled.{Style.RESET_ALL}")
         return None
 
 
@@ -214,60 +313,122 @@ def download_firmware(chip: str, firmware_dir: Path) -> Path:
     import urllib.error
     import hashlib
 
-    chip_suffix_map = {'esp32': '', 'c3': 'C3', 's3': 'S3', 'c5': 'C5', 'c6': 'C6'}
+    chip_suffix_map = {
+        'esp32': '',
+        'c3': 'C3',
+        's3': 'S3',
+        'c5': 'C5',
+        'c6': 'C6'
+    }
+
     chip_suffix = chip_suffix_map.get(chip, chip.upper())
-    firmware_name = f'{FIRMWARE_NAME_PREFIX}{chip_suffix}.bin' if chip_suffix else 'ESP32_CSI.bin'
+
+    firmware_name = (
+        f'{FIRMWARE_NAME_PREFIX}{chip_suffix}.bin'
+        if chip_suffix
+        else 'ESP32_CSI.bin'
+    )
+
     firmware_path = firmware_dir / firmware_name
     expected_hash = FIRMWARE_HASHES.get(firmware_name)
 
     def sha256_of(path: Path) -> str:
         h = hashlib.sha256()
+
         with open(path, 'rb') as f:
             for chunk in iter(lambda: f.read(8192), b''):
                 h.update(chunk)
+
         return h.hexdigest()
 
     if firmware_path.exists():
+
         if expected_hash:
             if sha256_of(firmware_path) == expected_hash:
-                print(f"{Fore.GREEN}✅ Using cached firmware: {firmware_name}{Style.RESET_ALL}")
+                print(
+                    f"{Fore.GREEN}"
+                    f"Using cached firmware: {firmware_name}"
+                    f"{Style.RESET_ALL}"
+                )
                 return firmware_path
-            print(f"{Fore.YELLOW}⚠️  Cached firmware hash mismatch, re-downloading...{Style.RESET_ALL}")
+
+            print(
+                f"{Fore.YELLOW}"
+                f"Cached firmware hash doesn't match. Downloading again."
+                f"{Style.RESET_ALL}"
+            )
+
             firmware_path.unlink()
+
         else:
-            print(f"{Fore.GREEN}✅ Using cached firmware: {firmware_name}{Style.RESET_ALL}")
+            print(
+                f"{Fore.GREEN}"
+                f"Using cached firmware: {firmware_name}"
+                f"{Style.RESET_ALL}"
+            )
             return firmware_path
 
     firmware_dir.mkdir(parents=True, exist_ok=True)
+
     url = f"{FIRMWARE_RELEASE_URL}/{firmware_name}"
-    print(f"{Fore.YELLOW}📥 Downloading firmware...{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}   {url}{Style.RESET_ALL}")
+
+    print(
+        f"{Fore.YELLOW}"
+        f"Downloading {firmware_name}..."
+        f"{Style.RESET_ALL}"
+    )
 
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
+
             total = int(response.headers.get('content-length', 0))
             downloaded = 0
+
             with open(firmware_path, 'wb') as f:
+
                 while True:
                     chunk = response.read(8192)
+
                     if not chunk:
                         break
+
                     f.write(chunk)
                     downloaded += len(chunk)
+
                     if total:
                         pct = (downloaded * 100) // total
-                        print(f"\r   Progress: {pct}%", end='', flush=True)
+                        print(
+                            f"\r   {pct}%",
+                            end='',
+                            flush=True
+                        )
+
             print()
 
         if expected_hash and sha256_of(firmware_path) != expected_hash:
-            print(f"{Fore.RED}❌ Downloaded firmware hash mismatch!{Style.RESET_ALL}")
+            print(
+                f"{Fore.RED}"
+                f"Downloaded firmware hash doesn't match."
+                f"{Style.RESET_ALL}"
+            )
+
             firmware_path.unlink()
             sys.exit(1)
 
-        print(f"{Fore.GREEN}✅ Firmware ready: {firmware_name}{Style.RESET_ALL}")
+        print(
+            f"{Fore.GREEN}"
+            f"Firmware ready: {firmware_name}"
+            f"{Style.RESET_ALL}"
+        )
+
         return firmware_path
+
     except urllib.error.URLError as e:
-        print(f"{Fore.RED}❌ Failed to download firmware: {e}{Style.RESET_ALL}")
+        print(
+            f"{Fore.RED}"
+            f"Firmware download failed: {e}"
+            f"{Style.RESET_ALL}"
+        )
         sys.exit(1)
 
 
@@ -275,77 +436,158 @@ def flash_firmware(args):
     try:
         import esptool
     except ImportError:
-        print(f"{Fore.RED}❌ esptool not found. Install it with:{Style.RESET_ALL}")
-        print("   pip install esptool")
+        print(f"{Fore.RED}esptool is not installed.{Style.RESET_ALL}")
+        print("Install it with: pip install esptool")
         sys.exit(1)
 
     port = get_serial_port(args.port)
 
     chip = args.chip
+
     if not chip:
         chip = detect_chip_type(port) or prompt_chip_type()
+
         if not chip:
             sys.exit(1)
 
     firmware_dir = REPO_ROOT / 'firmware'
+
     if args.firmware:
         firmware_path = Path(args.firmware)
+
         if not firmware_path.exists():
-            print(f"{Fore.RED}❌ Firmware not found: {firmware_path}{Style.RESET_ALL}")
+            print(
+                f"{Fore.RED}"
+                f"Firmware not found: {firmware_path}"
+                f"{Style.RESET_ALL}"
+            )
             sys.exit(1)
+
     else:
         firmware_path = download_firmware(chip, firmware_dir)
 
-    print(f"\n{Fore.MAGENTA}== SecuriFi — Flashing MicroPython + CSI firmware =={Style.RESET_ALL}")
-    print(f"{Fore.CYAN}Chip:     {chip.upper()}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}Port:     {port}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}Firmware: {firmware_path.name}{Style.RESET_ALL}\n")
+    print()
+    print(f"{Fore.MAGENTA}== Flashing CSI firmware =={Style.RESET_ALL}")
+    print(f"chip:     {chip.upper()}")
+    print(f"port:     {port}")
+    print(f"firmware: {firmware_path.name}")
+    print()
 
-    chip_name_map = {'esp32': 'esp32', 'c3': 'esp32c3', 's3': 'esp32s3', 'c5': 'esp32c5', 'c6': 'esp32c6'}
+    chip_name_map = {
+        'esp32': 'esp32',
+        'c3': 'esp32c3',
+        's3': 'esp32s3',
+        'c5': 'esp32c5',
+        'c6': 'esp32c6'
+    }
+
     chip_name = chip_name_map.get(chip, 'esp32c6')
-    base_args = ['--chip', chip_name, '--port', port, '--baud', '460800']
+
+    base_args = [
+        '--chip',
+        chip_name,
+        '--port',
+        port,
+        '--baud',
+        '460800'
+    ]
 
     try:
+
         if args.erase:
-            print(f"{Fore.YELLOW}1️⃣  Erasing flash...{Style.RESET_ALL}")
-            esptool.main(base_args + ['erase-flash'])
-            print(f"{Fore.GREEN}✅ Flash erased{Style.RESET_ALL}\n")
+            print(f"{Fore.YELLOW}Erasing flash...{Style.RESET_ALL}")
+
+            esptool.main(
+                base_args + ['erase-flash']
+            )
+
+            print(f"{Fore.GREEN}Flash erased.{Style.RESET_ALL}\n")
+
             time.sleep(2)
 
-        print(f"{Fore.YELLOW}2️⃣  Flashing firmware...{Style.RESET_ALL}")
-        flash_offset_map = {'esp32': '0x1000', 'c3': '0x0', 's3': '0x0', 'c5': '0x2000', 'c6': '0x0'}
+        print(f"{Fore.YELLOW}Writing firmware...{Style.RESET_ALL}")
+
+        flash_offset_map = {
+            'esp32': '0x1000',
+            'c3': '0x0',
+            's3': '0x0',
+            'c5': '0x2000',
+            'c6': '0x0'
+        }
+
         flash_offset = flash_offset_map.get(chip, '0x0')
 
         flash_args = base_args + [
-            '--before', 'default-reset', '--after', 'hard-reset',
-            'write-flash', '--flash-mode', 'dio', '--flash-freq', '40m',
-            '--flash-size', 'detect', flash_offset, str(firmware_path)
+            '--before',
+            'default-reset',
+            '--after',
+            'hard-reset',
+            'write-flash',
+            '--flash-mode',
+            'dio',
+            '--flash-freq',
+            '40m',
+            '--flash-size',
+            'detect',
+            flash_offset,
+            str(firmware_path)
         ]
 
         max_retries = 3
+
         for attempt in range(max_retries):
+
             try:
+
                 if attempt > 0:
-                    print(f"{Fore.YELLOW}🔄 Retry {attempt + 1}/{max_retries}...{Style.RESET_ALL}")
+                    print(
+                        f"{Fore.YELLOW}"
+                        f"Retrying ({attempt + 1}/{max_retries})..."
+                        f"{Style.RESET_ALL}"
+                    )
+
                     time.sleep(2)
+
                 esptool.main(flash_args)
-                print(f"\n{Fore.GREEN}✅ Firmware flashed successfully!{Style.RESET_ALL}\n")
-                print(f"{Fore.CYAN}Next steps:{Style.RESET_ALL}")
-                print(f"  ./me.py deploy --node master   (or --node slave --slave_id 1)")
-                print(f"  ./me.py run --node master\n")
+
+                print(
+                    f"\n{Fore.GREEN}"
+                    f"Flash complete."
+                    f"{Style.RESET_ALL}\n"
+                )
+
                 return
+
             except Exception as e:
+
                 if attempt < max_retries - 1:
-                    print(f"{Fore.YELLOW}⚠️  Attempt {attempt + 1} failed: {e}{Style.RESET_ALL}")
+                    print(
+                        f"{Fore.YELLOW}"
+                        f"Flash attempt {attempt + 1} failed: {e}"
+                        f"{Style.RESET_ALL}"
+                    )
                     continue
+
                 raise
+
     except Exception as e:
-        print(f"\n{Fore.RED}❌ Error flashing firmware: {e}{Style.RESET_ALL}")
-        print(f"\n{Fore.YELLOW}Troubleshooting:{Style.RESET_ALL}")
-        print("  1. Hold BOOT while connecting, or during flash")
-        print("  2. Use a data-capable USB cable / a USB 2.0 port")
-        print("  3. Close any other serial monitor using the port")
-        print(f"  4. Retry with --erase: {Fore.GREEN}./me.py flash --erase{Style.RESET_ALL}")
+
+        print(
+            f"\n{Fore.RED}"
+            f"Flash failed: {e}"
+            f"{Style.RESET_ALL}"
+        )
+
+        print(f"\n{Fore.YELLOW}Things to check:{Style.RESET_ALL}")
+        print("  - Board is connected")
+        print("  - No other program is using the serial port")
+        print("  - USB cable supports data")
+        print("  - Try holding BOOT while flashing")
+        print(
+            f"  - Try again with: "
+            f"{Fore.GREEN}./me.py flash --erase{Style.RESET_ALL}"
+        )
+
         sys.exit(1)
 
 
@@ -355,96 +597,293 @@ def flash_firmware(args):
 
 def _check_mpremote():
     try:
-        subprocess.run(['mpremote', '--version'], capture_output=True, check=True)
+        subprocess.run(
+            ['mpremote', '--version'],
+            capture_output=True,
+            check=True
+        )
+
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print(f"{Fore.RED}❌ mpremote not found. Install it with:{Style.RESET_ALL}")
-        print("   pip install mpremote")
+        print(f"{Fore.RED}mpremote is not installed.{Style.RESET_ALL}")
+        print("Install it with: pip install mpremote")
         sys.exit(1)
+
+
+def _flash_for_deploy(port):
+    """Flash the project's ESP32-C6 CSI firmware before deploying code."""
+
+    print()
+    print(f"{Fore.MAGENTA}== Preparing board =={Style.RESET_ALL}")
+    print(f"port:   {port}")
+    print(f"chip:   ESP32-C6")
+    print(f"action: erase + flash")
+    print()
+
+    flash_args = argparse.Namespace(
+        chip='c6',
+        port=port,
+        erase=True,
+        firmware=None,
+    )
+
+    flash_firmware(flash_args)
+
+    print(
+        f"{Fore.YELLOW}"
+        f"Waiting for the board to reboot..."
+        f"{Style.RESET_ALL}"
+    )
+
+    time.sleep(3)
 
 
 def deploy_code(args):
     _check_mpremote()
+
+    port = get_serial_port(args.port)
+
+    # Normal deploy:
+    #   1. erase flash
+    #   2. flash CSI firmware
+    #   3. wait for reboot
+    #   4. upload SecuriFi files
+    if not args.skip_flash:
+        _flash_for_deploy(port)
+        _check_mpremote()
+
     port = get_serial_port(args.port)
 
     node_info = NODE_DIRS[args.node]
+
     shared_dir = node_info["root"] / "shared"
     code_dir = node_info["root"] / node_info["code_subdir"]
 
     if not shared_dir.exists():
-        print(f"{Fore.RED}❌ Shared dir not found: {shared_dir}{Style.RESET_ALL}")
+        print(
+            f"{Fore.RED}"
+            f"Shared directory not found: {shared_dir}"
+            f"{Style.RESET_ALL}"
+        )
         sys.exit(1)
+
     if not code_dir.exists():
-        print(f"{Fore.RED}❌ Code dir not found: {code_dir}{Style.RESET_ALL}")
+        print(
+            f"{Fore.RED}"
+            f"Node directory not found: {code_dir}"
+            f"{Style.RESET_ALL}"
+        )
         sys.exit(1)
 
-    print(f"\n{Fore.MAGENTA}== SecuriFi — Deploying '{args.node}' node =={Style.RESET_ALL}")
-    print(f"{Fore.CYAN}Port: {port}{Style.RESET_ALL}\n")
-
-    # Sanity check the board is alive before we start copying files.
-    health = subprocess.run(
-        ['mpremote', 'connect', port, 'exec', 'print("MP_OK")'],
-        capture_output=True, text=True
+    print()
+    print(
+        f"{Fore.MAGENTA}"
+        f"== Deploying {args.node} node =="
+        f"{Style.RESET_ALL}"
     )
+    print(f"port: {port}")
+    print()
+
+    # Make sure the board is actually running MicroPython.
+    print(
+        f"{Fore.YELLOW}"
+        f"Checking MicroPython..."
+        f"{Style.RESET_ALL}"
+    )
+
+    health = subprocess.run(
+        [
+            'mpremote',
+            'connect',
+            port,
+            'exec',
+            'print("MP_OK")'
+        ],
+        capture_output=True,
+        text=True
+    )
+
     if health.returncode != 0 or 'MP_OK' not in (health.stdout or ''):
-        print(f"{Fore.RED}❌ Device is not responding with a valid MicroPython REPL{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}   Try reflashing: ./me.py flash --erase{Style.RESET_ALL}")
+        print(
+            f"{Fore.RED}"
+            f"Board isn't responding with a MicroPython REPL."
+            f"{Style.RESET_ALL}"
+        )
+        print(
+            f"{Fore.YELLOW}"
+            f"Try: ./me.py flash --erase"
+            f"{Style.RESET_ALL}"
+        )
         sys.exit(1)
 
-    # Create /shared on the device and make it an importable package.
-    print(f"{Fore.YELLOW}📁 Preparing /shared package...{Style.RESET_ALL}")
-    subprocess.run(['mpremote', 'connect', port, 'mkdir', ':shared'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    print(
+        f"{Fore.GREEN}"
+        f"MicroPython is responding."
+        f"{Style.RESET_ALL}"
+    )
+
+    # Create /shared and make it a Python package.
+    print(
+        f"{Fore.YELLOW}"
+        f"Preparing /shared..."
+        f"{Style.RESET_ALL}"
+    )
+
     subprocess.run(
-        ['mpremote', 'connect', port, 'exec', "open('shared/__init__.py','w').close()"],
-        check=True, capture_output=True
+        [
+            'mpremote',
+            'connect',
+            port,
+            'mkdir',
+            ':shared'
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False
+    )
+
+    subprocess.run(
+        [
+            'mpremote',
+            'connect',
+            port,
+            'exec',
+            "open('shared/__init__.py','w').close()"
+        ],
+        check=True,
+        capture_output=True
     )
 
     # Upload shared/*.py
-    print(f"{Fore.YELLOW}📤 Uploading shared/ files...{Style.RESET_ALL}")
-    shared_files = sorted(shared_dir.glob("*.py"))
-    if not shared_files:
-        print(f"{Fore.RED}❌ No .py files found in {shared_dir}{Style.RESET_ALL}")
-        sys.exit(1)
-    for f in shared_files:
-        print(f"  {f} → :shared/{f.name}")
-        subprocess.run(['mpremote', 'connect', port, 'cp', str(f), f':shared/{f.name}'],
-                        check=True, capture_output=True)
+    print(
+        f"{Fore.YELLOW}"
+        f"Uploading shared files..."
+        f"{Style.RESET_ALL}"
+    )
 
-    # Upload node-specific files to device root.
-    print(f"{Fore.YELLOW}📤 Uploading node files...{Style.RESET_ALL}")
-    root_files = ["config.py", "main.py", node_info["node_module"]]
+    shared_files = sorted(shared_dir.glob("*.py"))
+
+    if not shared_files:
+        print(
+            f"{Fore.RED}"
+            f"No Python files found in {shared_dir}"
+            f"{Style.RESET_ALL}"
+        )
+        sys.exit(1)
+
+    for f in shared_files:
+        print(f"  {f.name}")
+
+        subprocess.run(
+            [
+                'mpremote',
+                'connect',
+                port,
+                'cp',
+                str(f),
+                f':shared/{f.name}'
+            ],
+            check=True,
+            capture_output=True
+        )
+
+    # Upload node-specific files.
+    print(
+        f"{Fore.YELLOW}"
+        f"Uploading {args.node} files..."
+        f"{Style.RESET_ALL}"
+    )
+
+    root_files = [
+        "config.py",
+        "main.py",
+        node_info["node_module"]
+    ]
 
     for name in root_files:
         src = code_dir / name
+
         if not src.exists():
-            print(f"{Fore.RED}  ❌ Missing required file: {src}{Style.RESET_ALL}")
+            print(
+                f"{Fore.RED}"
+                f"Missing required file: {src}"
+                f"{Style.RESET_ALL}"
+            )
             sys.exit(1)
-        print(f"  {src} → :{name}")
-        subprocess.run(['mpremote', 'connect', port, 'cp', str(src), f':{name}'],
-                        check=True, capture_output=True)
 
-    # node_id.txt — for slaves, optionally override with --slave_id so the
-    # same tracked file can be reused across 3 physical boards.
-    node_id_src = code_dir / "node_id.txt"
-    if args.node == "slave" and args.slave_id:
-        node_id_value = f"slave_{args.slave_id}"
-        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tmp:
-            tmp.write(node_id_value)
-            tmp_path = tmp.name
-        print(f"  (generated) → :node_id.txt  [{node_id_value}]")
-        subprocess.run(['mpremote', 'connect', port, 'cp', tmp_path, ':node_id.txt'],
-                        check=True, capture_output=True)
-        os.unlink(tmp_path)
+        print(f"  {name}")
+
+        subprocess.run(
+            [
+                'mpremote',
+                'connect',
+                port,
+                'cp',
+                str(src),
+                f':{name}'
+            ],
+            check=True,
+            capture_output=True
+        )
+
+    # Generate node_id.txt locally and copy it to the ESP.
+    #
+    # Master:
+    #   python me.py deploy --node master
+    #   -> node_id.txt contains "master"
+    #
+    # Slave:
+    #   python me.py deploy --node slave --slave_id 1
+    #   -> node_id.txt contains "slave_1"
+    #
+    # There is intentionally no node_id.txt required in the repo anymore.
+
+    if args.node == "master":
+        node_id_value = "master"
+
     else:
-        if not node_id_src.exists():
-            print(f"{Fore.RED}  ❌ Missing required file: {node_id_src}{Style.RESET_ALL}")
+        if not args.slave_id:
+            print(
+                f"{Fore.RED}"
+                f"Slave deployment requires --slave_id."
+                f"{Style.RESET_ALL}"
+            )
             sys.exit(1)
-        print(f"  {node_id_src} → :node_id.txt")
-        subprocess.run(['mpremote', 'connect', port, 'cp', str(node_id_src), ':node_id.txt'],
-                        check=True, capture_output=True)
 
-    print(f"\n{Fore.GREEN}✅ Deployment complete!{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}Run it with:{Style.RESET_ALL}  ./me.py run --port {port}\n")
+        node_id_value = f"slave_{args.slave_id}"
+
+    with tempfile.NamedTemporaryFile(
+        "w",
+        suffix=".txt",
+        delete=False
+    ) as tmp:
+        tmp.write(node_id_value)
+        tmp_path = tmp.name
+
+    print(f"  node_id.txt -> {node_id_value}")
+
+    try:
+        subprocess.run(
+            [
+                'mpremote',
+                'connect',
+                port,
+                'cp',
+                tmp_path,
+                ':node_id.txt'
+            ],
+            check=True,
+            capture_output=True
+        )
+
+    finally:
+        os.unlink(tmp_path)
+
+    print()
+    print(
+        f"{Fore.GREEN}"
+        f"Deployment complete."
+        f"{Style.RESET_ALL}"
+    )
 
 
 # ============================================================================
@@ -453,33 +892,85 @@ def deploy_code(args):
 
 def run_application(args):
     _check_mpremote()
+
     port = get_serial_port(args.port)
 
-    print(f"\n{Fore.MAGENTA}== SecuriFi — Running main.py =={Style.RESET_ALL}\n")
+    print()
+    print(
+        f"{Fore.MAGENTA}"
+        f"== Running main.py =="
+        f"{Style.RESET_ALL}"
+    )
+    print(f"port: {port}")
+    print()
 
     process = None
+
     try:
-        process = subprocess.Popen(['mpremote', 'connect', port, 'run', 'main.py'])
+        process = subprocess.Popen(
+            [
+                'mpremote',
+                'connect',
+                port,
+                'run',
+                'main.py'
+            ]
+        )
+
         process.wait()
+
     except KeyboardInterrupt:
-        print(f"\n{Fore.YELLOW}Stopped — resetting device...{Style.RESET_ALL}")
+        print(
+            f"\n{Fore.YELLOW}"
+            f"Stopping..."
+            f"{Style.RESET_ALL}"
+        )
+
         if process:
             process.terminate()
+
             try:
                 process.wait(timeout=2)
+
             except subprocess.TimeoutExpired:
                 process.kill()
+
         time.sleep(0.5)
+
+        print(
+            f"{Fore.YELLOW}"
+            f"Resetting board..."
+            f"{Style.RESET_ALL}"
+        )
+
         try:
             subprocess.run(
-                ['mpremote', 'connect', port, 'exec', 'import machine; machine.reset()'],
-                timeout=5, capture_output=True
+                [
+                    'mpremote',
+                    'connect',
+                    port,
+                    'exec',
+                    'import machine; machine.reset()'
+                ],
+                timeout=5,
+                capture_output=True
             )
+
         except Exception:
             pass
-        print(f"{Fore.GREEN}Reset sent.{Style.RESET_ALL}")
+
+        print(
+            f"{Fore.GREEN}"
+            f"Board reset."
+            f"{Style.RESET_ALL}"
+        )
+
     except Exception as e:
-        print(f"\n{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        print(
+            f"\n{Fore.RED}"
+            f"Run failed: {e}"
+            f"{Style.RESET_ALL}"
+        )
         sys.exit(1)
 
 
@@ -490,80 +981,233 @@ def run_application(args):
 def verify_installation(args):
     port = get_serial_port(args.port)
 
-    print(f"\n{Fore.MAGENTA}== SecuriFi — Verifying installation =={Style.RESET_ALL}\n")
+    print()
+    print(
+        f"{Fore.MAGENTA}"
+        f"== Checking installation =="
+        f"{Style.RESET_ALL}"
+    )
+    print(f"port: {port}")
+    print()
+
     all_ok = True
 
-    print(f"{Fore.YELLOW}🔍 Checking CSI firmware support...{Style.RESET_ALL}")
+    # CSI firmware
+    print(
+        f"{Fore.YELLOW}"
+        f"Checking CSI support..."
+        f"{Style.RESET_ALL}"
+    )
+
     try:
-        result = subprocess.run([
-            'mpremote', 'connect', port, 'exec',
-            "import network; wlan = network.WLAN(network.STA_IF); "
-            "m = [x for x in dir(wlan) if 'csi' in x.lower()]; "
-            "import esp; m2 = [x for x in dir(esp) if 'csi' in x.lower()]; "
-            "print(','.join(m + m2) if (m or m2) else 'NONE')"
-        ], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            [
+                'mpremote',
+                'connect',
+                port,
+                'exec',
+                (
+                    "import network; "
+                    "wlan = network.WLAN(network.STA_IF); "
+                    "m = [x for x in dir(wlan) if 'csi' in x.lower()]; "
+                    "import esp; "
+                    "m2 = [x for x in dir(esp) if 'csi' in x.lower()]; "
+                    "print(','.join(m + m2) if (m or m2) else 'NONE')"
+                )
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
         found = result.stdout.strip()
+
         if found and found != 'NONE':
-            print(f"{Fore.GREEN}✅ CSI support found: {found}{Style.RESET_ALL}")
+            print(
+                f"{Fore.GREEN}"
+                f"CSI support: {found}"
+                f"{Style.RESET_ALL}"
+            )
         else:
-            print(f"{Fore.RED}❌ CSI support not found in firmware{Style.RESET_ALL}")
-            print(f"{Fore.YELLOW}   Hint: ./me.py flash --erase{Style.RESET_ALL}")
+            print(
+                f"{Fore.RED}"
+                f"CSI support not found."
+                f"{Style.RESET_ALL}"
+            )
+
+            print(
+                f"{Fore.YELLOW}"
+                f"Try: ./me.py flash --erase"
+                f"{Style.RESET_ALL}"
+            )
+
             all_ok = False
+
     except subprocess.CalledProcessError as e:
-        print(f"{Fore.RED}❌ Failed to check CSI support: {e.stderr.strip()}{Style.RESET_ALL}")
+        error = (e.stderr or "").strip()
+
+        print(
+            f"{Fore.RED}"
+            f"CSI check failed"
+            f"{Style.RESET_ALL}"
+        )
+
+        if error:
+            print(f"  {error}")
+
         all_ok = False
+
     print()
 
-    print(f"{Fore.YELLOW}🔍 Checking deployed files (root)...{Style.RESET_ALL}")
+    # Root files
+    print(
+        f"{Fore.YELLOW}"
+        f"Checking root files..."
+        f"{Style.RESET_ALL}"
+    )
+
     try:
-        result = subprocess.run([
-            'mpremote', 'connect', port, 'exec', 'import os; print(os.listdir("/"))'
-        ], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            [
+                'mpremote',
+                'connect',
+                port,
+                'exec',
+                'import os; print(os.listdir("/"))'
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
         listing = result.stdout.strip()
-        print(f"{Fore.GREEN}✅ Root files: {listing}{Style.RESET_ALL}")
-        for required in ("main.py", "config.py", "node_id.txt", "shared"):
+
+        print(f"  {listing}")
+
+        for required in (
+            "main.py",
+            "config.py",
+            "node_id.txt",
+            "shared"
+        ):
             if required not in listing:
-                print(f"{Fore.RED}  ❌ Missing: {required}{Style.RESET_ALL}")
+                print(
+                    f"{Fore.RED}"
+                    f"  Missing: {required}"
+                    f"{Style.RESET_ALL}"
+                )
                 all_ok = False
+
     except subprocess.CalledProcessError:
-        print(f"{Fore.RED}❌ Could not list device files{Style.RESET_ALL}")
+        print(
+            f"{Fore.RED}"
+            f"Couldn't list the device root."
+            f"{Style.RESET_ALL}"
+        )
         all_ok = False
+
     print()
 
-    print(f"{Fore.YELLOW}🔍 Checking /shared package...{Style.RESET_ALL}")
+    # Shared files
+    print(
+        f"{Fore.YELLOW}"
+        f"Checking /shared..."
+        f"{Style.RESET_ALL}"
+    )
+
     try:
-        result = subprocess.run([
-            'mpremote', 'connect', port, 'exec', 'import os; print(os.listdir("/shared"))'
-        ], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            [
+                'mpremote',
+                'connect',
+                port,
+                'exec',
+                'import os; print(os.listdir("/shared"))'
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
         listing = result.stdout.strip()
-        print(f"{Fore.GREEN}✅ /shared files: {listing}{Style.RESET_ALL}")
-        for required in ("__init__.py", "securifi_node.py", "csi_capture.py",
-                          "mvs_detector.py", "traffic_generator.py", "mq2.py"):
+
+        print(f"  {listing}")
+
+        for required in (
+            "__init__.py",
+            "securifi_node.py",
+            "csi_capture.py",
+            "mvs_detector.py",
+            "traffic_generator.py",
+            "mq2.py"
+        ):
             if required not in listing:
-                print(f"{Fore.RED}  ❌ Missing: shared/{required}{Style.RESET_ALL}")
+                print(
+                    f"{Fore.RED}"
+                    f"  Missing: shared/{required}"
+                    f"{Style.RESET_ALL}"
+                )
                 all_ok = False
+
     except subprocess.CalledProcessError:
-        print(f"{Fore.RED}❌ Could not list /shared{Style.RESET_ALL}")
+        print(
+            f"{Fore.RED}"
+            f"Couldn't list /shared."
+            f"{Style.RESET_ALL}"
+        )
         all_ok = False
+
     print()
 
-    print(f"{Fore.YELLOW}🔍 Reading node_id.txt...{Style.RESET_ALL}")
+    # Node ID
+    print(
+        f"{Fore.YELLOW}"
+        f"Checking node_id.txt..."
+        f"{Style.RESET_ALL}"
+    )
+
     try:
-        result = subprocess.run([
-            'mpremote', 'connect', port, 'exec',
-            "print(open('node_id.txt').read().strip())"
-        ], capture_output=True, text=True, check=True)
-        print(f"{Fore.GREEN}✅ node_id: {result.stdout.strip()}{Style.RESET_ALL}")
+        result = subprocess.run(
+            [
+                'mpremote',
+                'connect',
+                port,
+                'exec',
+                "print(open('node_id.txt').read().strip())"
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        print(
+            f"{Fore.GREEN}"
+            f"  node_id: {result.stdout.strip()}"
+            f"{Style.RESET_ALL}"
+        )
+
     except subprocess.CalledProcessError:
-        print(f"{Fore.RED}❌ Could not read node_id.txt{Style.RESET_ALL}")
+        print(
+            f"{Fore.RED}"
+            f"Couldn't read node_id.txt."
+            f"{Style.RESET_ALL}"
+        )
         all_ok = False
+
     print()
 
     if all_ok:
-        print(f"{Fore.GREEN}✅ Installation verified successfully!{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}Run it with:{Style.RESET_ALL} ./me.py run --port {port}\n")
+        print(
+            f"{Fore.GREEN}"
+            f"Installation looks good."
+            f"{Style.RESET_ALL}"
+        )
     else:
-        print(f"{Fore.RED}❌ Some checks failed — see above.{Style.RESET_ALL}\n")
+        print(
+            f"{Fore.RED}"
+            f"Some checks failed."
+            f"{Style.RESET_ALL}"
+        )
         sys.exit(1)
 
 
@@ -577,55 +1221,121 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Flash the CSI-enabled MicroPython firmware (auto-detect port & chip, default C6)
+  # Flash the CSI-enabled MicroPython firmware
   ./me.py flash --erase
 
-  # Deploy the master node
+  # Complete master deployment
   ./me.py deploy --node master
 
-  # Deploy slave board #2 (reuses slave_node/slave/node_id.txt as a template,
-  # overriding its content to "slave_2" for this specific board)
+  # Complete slave deployment
   ./me.py deploy --node slave --slave_id 2
 
-  # Run the deployed firmware and see live logs
+  # Upload Python code without reflashing
+  ./me.py deploy --node master --skip-flash
+
+  # Run the deployed firmware
   ./me.py run
 
-  # Sanity-check what's on the board
+  # Check what's on the board
   ./me.py verify
 """
     )
-    sub = parser.add_subparsers(dest='command', help='Available commands')
 
-    flash_p = sub.add_parser('flash', help='Flash the CSI-enabled MicroPython firmware')
-    flash_p.add_argument('--chip', choices=['esp32', 'c3', 's3', 'c5', 'c6'],
-                          help='Chip type (default: auto-detect, project default is c6)')
-    flash_p.add_argument('--port', help='Serial port (auto-detected if omitted)')
-    flash_p.add_argument('--erase', action='store_true', help='Erase flash before flashing (recommended)')
-    flash_p.add_argument('--firmware', help='Path to a custom firmware .bin (optional)')
+    sub = parser.add_subparsers(
+        dest='command',
+        help='Available commands'
+    )
 
-    deploy_p = sub.add_parser('deploy', help='Deploy master or slave code to the board')
-    deploy_p.add_argument('--node', choices=['master', 'slave'], required=True,
-                           help='Which node type to deploy')
-    deploy_p.add_argument('--port', help='Serial port (auto-detected if omitted)')
-    deploy_p.add_argument('--slave_id', choices=['1', '2', '3'],
-                           help='Override node_id.txt to slave_<id> (slave only, per physical board)')
+    flash_p = sub.add_parser(
+        'flash',
+        help='Flash the CSI-enabled MicroPython firmware'
+    )
 
-    run_p = sub.add_parser('run', help='Run main.py on the board and stream logs')
-    run_p.add_argument('--port', help='Serial port (auto-detected if omitted)')
+    flash_p.add_argument(
+        '--chip',
+        choices=['esp32', 'c3', 's3', 'c5', 'c6'],
+        help='Chip type (default: auto-detect, project default is c6)'
+    )
 
-    verify_p = sub.add_parser('verify', help='Verify firmware + deployed files on the board')
-    verify_p.add_argument('--port', help='Serial port (auto-detected if omitted)')
+    flash_p.add_argument(
+        '--port',
+        help='Serial port (auto-detected if omitted)'
+    )
+
+    flash_p.add_argument(
+        '--erase',
+        action='store_true',
+        help='Erase flash before flashing'
+    )
+
+    flash_p.add_argument(
+        '--firmware',
+        help='Path to a custom firmware .bin'
+    )
+
+    deploy_p = sub.add_parser(
+        'deploy',
+        help='Deploy master or slave code to the board'
+    )
+
+    deploy_p.add_argument(
+        '--node',
+        choices=['master', 'slave'],
+        required=True,
+        help='Which node type to deploy'
+    )
+
+    deploy_p.add_argument(
+        '--port',
+        help='Serial port (auto-detected if omitted)'
+    )
+
+    deploy_p.add_argument(
+        '--slave_id',
+        choices=['1', '2', '3'],
+        help='Slave ID: 1, 2 or 3'
+    )
+
+    deploy_p.add_argument(
+        '--skip-flash',
+        action='store_true',
+        help='Skip erase + firmware flash'
+    )
+
+    run_p = sub.add_parser(
+        'run',
+        help='Run main.py on the board and stream logs'
+    )
+
+    run_p.add_argument(
+        '--port',
+        help='Serial port (auto-detected if omitted)'
+    )
+
+    verify_p = sub.add_parser(
+        'verify',
+        help='Verify firmware and deployed files'
+    )
+
+    verify_p.add_argument(
+        '--port',
+        help='Serial port (auto-detected if omitted)'
+    )
 
     args = parser.parse_args()
 
     if args.command == 'flash':
         flash_firmware(args)
+
     elif args.command == 'deploy':
         deploy_code(args)
+
     elif args.command == 'run':
         run_application(args)
+
     elif args.command == 'verify':
         verify_installation(args)
+
     else:
         parser.print_help()
 
