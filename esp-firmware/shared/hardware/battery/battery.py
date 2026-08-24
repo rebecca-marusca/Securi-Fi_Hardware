@@ -66,7 +66,7 @@ class BatteryMonitor:
             self._smoothed_pct = (EMA_ALPHA * raw_pct) + ((1- EMA_ALPHA) * self._smoothed_pct)
 
         percentage = int(self._smoothed_pct)
-        return BatteryReading(voltage=round(v_batt, 2), percentage=percentage, is_low=(percent < 20))
+        return BatteryReading(voltage=round(v_batt, 2), percentage=percentage, is_low=(percentage < 20))
 
     
             
