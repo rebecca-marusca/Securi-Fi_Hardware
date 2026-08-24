@@ -10,89 +10,13 @@ import time
 from .mvs_detector import MVSDetector
 from .traffic_generator import TrafficGenerator
 from .csi_capture import CSICapture
-from .mq2 import MQ2Sensor
+from .hardware.gas.mq2 import MQ2Sensor
+from .hardware.battery.battery import BatteryMonitor
 
 WIFI_TIMEOUT_SECONDS = 20
 WATCHDOG_SECONDS = 60
 SENSOR_POLL_MS = 50
 STALE_THRESHOLD_SECONDS = 5
-
-_VOLTAGE_CURVE = [
-    (4.20, 100),
-    (4.00, 85),
-    (3.85, 70),
-    (3.75, 50),
-    (3.65, 30),
-    (3.50, 15),
-    (3.30, 5),
-    (3.00, 0),
-]
-BATTERY_SAMPLE_COUNT = 10
-BATTERY_DIVIDER_RATIO = 2.0
-ADC_REF_VOLTAGE = 3.3
-ADC_MAX_RAW = 4095
-
-class BatteryReading:
-    __slots__ = ("voltage", "percentage", "is_low")
-
-    def __init__(self, voltage: float, percentage: int, is_low: bool):
-        self.voltage = voltage
-        self.percentage = percentage
-        self.is_low = is_low
-
-    def __repr__(self):
-        return f"BatteryReading(voltage={self.voltage}, percentage={self.percentage}, is_low={self.is_low})"
-
-
-class BatteryMonitor:
-    def __init__(self, pin: int):
-        self._pin_num = pin
-        self._adc = None
-        self._init_adc()
-
-    def read(self) -> BatteryReading:
-        if self._adc is None:
-            return BatteryReading(voltage=0.0, percentage=0, is_low=False)
-
-        raw_sum = 0
-        for _ in range(BATTERY_SAMPLE_COUNT):
-            raw_sum += self._adc.read()
-            time.sleep_ms(2)
-        raw_avg = raw_sum / BATTERY_SAMPLE_COUNT
-
-        v_adc = (raw_avg / ADC_MAX_RAW) * ADC_REF_VOLTAGE
-        v_batt = v_adc * BATTERY_DIVIDER_RATIO
-
-        percentage = self._voltage_to_percentage(v_batt)
-        return BatteryReading(voltage=round(v_batt, 2), percentage=percentage, is_low=(percentage < 20))
-
-    @staticmethod
-    def _voltage_to_percentage(voltage: float) -> int:
-        curve = _VOLTAGE_CURVE
-        if voltage >= curve[0][0]:
-            return curve[0][1]
-        if voltage <= curve[-1][0]:
-            return curve[-1][1]
-
-        for i in range(len(curve) - 1):
-            v_high, p_high = curve[i]
-            v_low, p_low = curve[i + 1]
-            if v_low <= voltage <= v_high:
-                span = v_high - v_low
-                frac = (voltage - v_low) / span if span else 0
-                return int(p_low + frac * (p_high - p_low))
-
-        return 0
-
-    def _init_adc(self) -> None:
-        try:
-            from machine import ADC, Pin
-            pin = Pin(self._pin_num)
-            self._adc = ADC(pin)
-            self._adc.atten(ADC.ATTN_11DB)
-            self._adc.width(ADC.WIDTH_12BIT)
-        except (ImportError, AttributeError):
-            self._adc = None
         
 class NodeReading:
     __slots__ = (
