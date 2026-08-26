@@ -134,6 +134,8 @@ class MasterNode(SecuriFiNode):
 
     async def _loop_mqtt_commands(self) -> None:
         cmd_topic = f"{MQTT_TOPIC}/cmd"
+        last_ping = time.ticks_ms()
+        PING_INTERVAL_MS = 15000
 
         def on_message(topic, msg):
             try:
@@ -191,6 +193,10 @@ class MasterNode(SecuriFiNode):
         while self._running: 
             try:
                 self._mqtt.check_msg()
+
+                if time.ticks_diff(time.ticks_ms(), last_ping) > PING_INTERVAL_MS:
+                    self._mqtt.ping()
+                    last_ping = time.ticks_ms()
             except OSError:
                 await self._mqtt_reconnect()
             await asyncio.sleep_ms(100)
@@ -247,7 +253,8 @@ class MasterNode(SecuriFiNode):
             },
             "sensors":{
                 "flame": False, # TODO
-                "gas": own_reading.gas_detected
+                "gas": own_reading.gas_detected,
+                "battery_pct": own_reading.battery_pct
             }
         })
 
@@ -271,7 +278,8 @@ class MasterNode(SecuriFiNode):
                     },
                     "sensors":{
                         "flame": False, 
-                        "gas": False
+                        "gas": False,
+                        "battery_pct": 0
                     }
                 })
             else:
@@ -286,14 +294,15 @@ class MasterNode(SecuriFiNode):
                     "probability": prob,
                     "raw_mq2_reading": r.get("mq2", 0),
                     "warnings": {
-                        "low_battery": r.get("low_bat", False), # TODO
+                        "low_battery": r.get("low_bat", False),
                         "not_transmitting": False,
                         "signal_weak": False, # TODO
                         "sensor_flat": r.get("sen_flat", False)
                     },
                     "sensors":{
                         "flame": False, # TODO
-                        "gas": r.get("gas", False)
+                        "gas": r.get("gas", False),
+                        "battery_pct": r.get("bat", 0)
                     }
                 })
 

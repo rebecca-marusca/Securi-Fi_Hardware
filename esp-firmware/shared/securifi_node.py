@@ -132,8 +132,8 @@ class SecuriFiNode:
         self._running = True
 
         wlan = self._connect_wifi()
-        router_ip = wlan.ifconfig()[2]
-        router_mac = self._resolve_router_mac(router_ip)
+        self._router_ip = wlan.ifconfig()[2]
+        self._router_mac = self._resolve_router_mac(self._router_ip)
 
         self._start_sensing()
         self._wait_for_calibration()
@@ -160,7 +160,7 @@ class SecuriFiNode:
         self._csi_capture.start()
         _thread.start_new_thread(self._csi_capture.run, ())
 
-    def _pause_sensing(self) -> None:
+    def _pause_sensing(self) -> None: #TODO
         if self._traffic_gen:
             self._traffic_gen.stop()
         if self._csi_capture:
@@ -252,7 +252,7 @@ class SecuriFiNode:
 
         self._soft_reboot(self.ERR_WIFI_FAILED)
 
-    def _resolve_router_mac(self, router_ip: str):
+    def _resolve_router_mac(self, router_ip: str): #TODO fix it
         try:
             import socket
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -284,8 +284,13 @@ class SecuriFiNode:
             if elapsed > self.CALIBRATION_TIMEOUT_S:
                 self._soft_reboot(self.ERR_CALIBRATION_FAILED)
 
-            if elapsed % 5 == 0:
-                print(f"[{self._node_id}] Calibrating... {elapsed}s / {self.CALIBRATION_TIMEOUT_S}s")
+            
+            print(f"[{self._node_id}] Calibrating... {elapsed}s / {self.CALIBRATION_TIMEOUT_S}s "
+                 f"(captured={self._csi_capture.packets_captured}, "
+                 f"filtered={self._csi_capture.packets_filtered}, "
+                 f"malformed={self._csi_capture.packets_malformed}, "
+                 f"sent={self._traffic_gen.packets_sent}, "
+                 f"dropped={self._traffic_gen.packets_dropped})")
 
             time.sleep(0.5)
 
