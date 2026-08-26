@@ -22,7 +22,7 @@ mpremote connect COMX repl
 flow for mqtt: (you can download it from mosquitto.org/downloads, be sure it is for your operating system)
 turn on hotspot (be sure to be the same name and pasword as in configs)
 start mosqiutto as admin: net start mosquitto
-run a sub from mosquitto folder: mosquitto_sub -h [ip] -p 1883 -t "securifi/master" -v (change the ip with yours, dont need the brackets)
+run a sub from mosquitto folder: mosquitto_sub -h 192.168.137.1 -p 1883 -t "securifi/master" -v (change the ip with yours, dont need the brackets)
 
 for grapher:
 in the root folder run python grapher, you might have to change the mqtt broker for your ip

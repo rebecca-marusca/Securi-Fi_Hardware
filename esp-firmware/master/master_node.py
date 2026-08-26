@@ -34,7 +34,9 @@ class MasterNode(SecuriFiNode):
         self._own_mac = self._read_own_mac()
         self._init_espnow()
         self._init_mqtt()
-
+        self._publish_config_request(self._node_id)
+        for state in self._slave_states.values():
+            self._publish_config_request(state.node_id)
         return [
             self._loop_espnow_rx(),
             self._loop_mqtt_publish(),
@@ -86,6 +88,13 @@ class MasterNode(SecuriFiNode):
         except (ValueError, UnicodeError) as e:
             print(f"[{self._node_id}] Failed to parse slave packet from {mac}: {e}")
 
+        if "confirmed" in payload:
+            self._publish_config_confirmation(
+                node_id=state.node_id,
+                armed=payload.get("armed", False),
+                success=payload.get("confirmed", False)
+            )
+
         if payload.get("cmd") == "state_request":
             response = "arm" if self._state == self.STATE_ARMED else "standby"
             try:
@@ -133,7 +142,7 @@ class MasterNode(SecuriFiNode):
             await asyncio.sleep_ms(MQTT_PUBLISH_INTERVAL_MS)
 
     async def _loop_mqtt_commands(self) -> None:
-        cmd_topic = f"{MQTT_TOPIC}/cmd"
+        cmd_topic = f"securifi/config/command/{self._own_mac}"
         last_ping = time.ticks_ms()
         PING_INTERVAL_MS = 15000
 
@@ -143,27 +152,23 @@ class MasterNode(SecuriFiNode):
                 command = data.get("cmd")
 
                 if command == "arm":
-                        self._armed = True
-                        self._state = self.STATE_ARMED
-                        self._resume_sensing()
-                        self._broadcast_espnow({"cmd": "arm"})
-                elif command == "arm_target":
                         target = data.get("node_id")
                         if target == "master":
-                            self._state = self.STATE_ARMED
+                            success = self._resume_sensing()
+                            if success:
+                                self._state = self.STATE_ARMED
+                            self._publish_config_confirmation(target, armed=success, success=success)
                         else:
                             self._send_espnow_to(target, {"cmd": "arm"})
                 elif command == "standby":
-                        self._armed = False
-                        self._state = self.STATE_STANDBY
-                        self._pause_sensing()
-                        self._broadcast_espnow({"cmd": "standby"})
-                elif command == "standby_target":
                         target = data.get("node_id")
                         if target == "master":
+                            success = self._pause_sensing()
                             self._state = self.STATE_STANDBY
+                            self._publish_config_confirmation(target, armed=False, success=success)
                         else:
                             self._send_espnow_to(target, {"cmd": "standby"})
+                        
                 elif command == "sleep":
                         self._broadcast_espnow({"cmd": "sleep"})
                         self._enter_master_deep_sleep()
@@ -229,6 +234,32 @@ class MasterNode(SecuriFiNode):
         print(f"[{self._node_id}] MQTT reconnect failed, soft rebooting the master...")
         await asyncio.sleep(1)
         self._soft_reboot(self.ERR_MQTT_FAILED)
+
+    def _publish_config_request(self, node_id: str) -> None:
+        topic = f"securifi/config/request/{self._own_mac}"
+        payload = json.dumps({
+            "node_id": node_id,
+            "master_mac": self._own_mac
+        })
+        try:
+            self._mqtt.publish(topic, payload)
+            print(f"[{self._node_id}] Config request sent for node {node_id}")
+        except OSError as e:
+            print(f"[{self._node_id}] Failed to send config request: {e}")
+
+    def _publish_config_confirmation(self, node_id: str, armed: bool, success: bool) -> None:
+        topic = f"securifi/config/confirm/{self._own_mac}"
+        payload = json.dumps({
+            "node_id": node_id,
+            "master_mac": self._own_mac,
+            "armed": armed,
+            "success": success
+        })
+        try:
+            self._mqtt.publish(topic, payload)
+            print(f"[{self._node_id}] Config confirmation: node={node_id}, armed={armed}, success={success}")
+        except OSError as e:
+            print(f"[{self._node_id}] Failed to send config confirmation: {e}")
 
     # package builder
     def _build_package(self, own_reading: NodeReading) -> dict:
@@ -318,7 +349,6 @@ class MasterNode(SecuriFiNode):
         return {
             "master_mac": self._own_mac or "00:00:00:00:00:00",
             "timestamp": str(time.time()),
-            "armed": self._armed,
             "intruder_probability": round(intruder_probability, 4),
             "warning_type": warning_type,
             "nodes": nodes

@@ -152,23 +152,44 @@ class SecuriFiNode:
         if self._csi_capture:
             self._csi_capture.stop()
 
-    def _start_sensing(self) -> None:
-        self._traffic_gen = TrafficGenerator(target_ip=self._router_ip, rate_pps=self._tg_rate)
-        _thread.start_new_thread(self._traffic_gen.run, ())
+    def _start_sensing(self) -> bool:
+        if self._traffic_gen is not None or self._csi_capture is not None:
+            return True
 
-        self._csi_capture = CSICapture(detector=self._detector, router_mac=self._router_mac)
-        self._csi_capture.start()
-        _thread.start_new_thread(self._csi_capture.run, ())
+        try:
+            self._traffic_gen = TrafficGenerator(target_ip=self._router_ip, rate_pps=self._tg_rate)
+            _thread.start_new_thread(self._traffic_gen.run, ())
 
-    def _pause_sensing(self) -> None: #TODO
-        if self._traffic_gen:
-            self._traffic_gen.stop()
-        if self._csi_capture:
-            self._csi_capture.stop()
+            self._csi_capture = CSICapture(detector=self._detector, router_mac=self._router_mac)
+            self._csi_capture.start()
 
-    def _resume_sensing(self) -> None:
+            if not self._csi_capture.is_active:
+                raise RuntimeError("CSI capture failed to activate")
+
+            _thread.start_new_thread(self._csi_capture.run, ())
+            return True
+        except (OSError, RuntimeError) as e:
+            print(f"[{self._node_id}] Failed to start sensing: {e}")
+            self._traffic_gen = None
+            self._csi_capture = None
+            return False
+
+    def _pause_sensing(self) -> bool:
+        try:
+            if self._traffic_gen:
+                self._traffic_gen.stop()
+                self._traffic_gen = None
+            if self._csi_capture:
+                self._csi_capture.stop()
+                self._csi_capture = None
+            return True
+        except Exception as e:
+            print(f"[{self._node_id}] Error pausing sensing: {e}")
+            return False
+
+    def _resume_sensing(self) -> bool:
         print(f"[{self._node_id}] Resuming sensing")
-        self._start_sensing()
+        return self._start_sensing()
 
     # async:
     async def _main_loop(self) -> None:

@@ -1,0 +1,80 @@
+import subprocess
+import json
+
+BROKER_IP = "192.168.137.1"
+PORT = "1883"
+TOPIC = "securifi/master"
+
+MOSQUITTO_SUB = r"C:\Program Files\Mosquitto\mosquitto_sub.exe"
+
+def reorder_node(node):
+    if isinstance(node, dict):
+        if "node_id" in node:
+            node = {
+                "node_id": node["node_id"],
+                **{k: reorder_node(v) for k, v in node.items() if k != "node_id"}
+            }
+        else:
+            node = {k: reorder_node(v) for k, v in node.items()}
+
+    elif isinstance(node, list):
+        node = [reorder_node(item) for item in node]
+
+    return node
+
+command = [
+    MOSQUITTO_SUB,
+    "-h", BROKER_IP,
+    "-p", PORT,
+    "-t", TOPIC,
+    "-v"
+]
+
+print(f"Listening on {BROKER_IP}:{PORT} -> {TOPIC}")
+print("Press Ctrl+C to stop.\n")
+
+try:
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+
+    while True:
+        line = process.stdout.readline()
+
+        if not line:
+            # mosquitto_sub exited
+            break
+
+        line = line.strip()
+
+        if not line:
+            continue
+
+        try:
+            topic, payload = line.split(" ", 1)
+
+            package = json.loads(payload)
+            package = reorder_node(package)
+
+            print("=" * 70)
+            print(f"Topic: {topic}")
+            print("=" * 70)
+            print(json.dumps(package, indent=4))
+            print()
+
+        except ValueError:
+            print(f"[MQTT] {line}")
+
+        except json.JSONDecodeError:
+            print(f"[INVALID JSON] {line}")
+
+except KeyboardInterrupt:
+    print("\nStopping...")
+    process.terminate()
+    process.wait()
+    print("Stopped.")
+

@@ -95,7 +95,7 @@ class CSICapture:
                 data = result[_CSI_DATA_INDEX]
 
                 # MAC filter
-                if self._router_mac_bytes and mac != self._router_mac_bytes:
+                if self._router_mac_bytes and mac != self._router_mac_bytes: #TODO
                     self._packets_filtered += 1
                     continue
 
