@@ -5,6 +5,7 @@ import time
 WARMUP_SECONDS = 30
 DEFAULT_ADC_PIN = 0
 DEFAULT_THRESHOLD = 1500
+DEFAULT_POWER_PIN = 5
 CONSECUTIVE_TRIGGER_COUNT = 3
 
 
@@ -30,10 +31,12 @@ class MQ2Sensor:
         self._adc = None
         self._warmup_start = None
         self._consecutive_count = 0
+        self._power_pin = None
 
         self._last_raw = 0
         self._last_gas_detected = False
         self._init_adc()
+        self._init_power_pin()
 
 
     # outside functions:
@@ -85,6 +88,24 @@ class MQ2Sensor:
     def last_reading(self) -> MQ2Reading:
         return MQ2Reading(raw_value=self._last_raw, gas_detected=self._last_gas_detected, is_ready=self.is_ready)
 
+    def power_switch(self, switch: bool) -> None:
+        if self._power_pin is None:
+            return
+        try:
+            if switch:
+                self._power_pin.value(1)
+                if self._warmup_start is None:
+                    self._warmup_start = time.time()
+                return self._power_pin.value == 1
+            else:
+                self._power_pin.value(0)
+                self._warmup_start = 0
+                self._consecutive_count = 0
+                self._last_raw = 0
+                self._last_gas_detected = False
+                return self._power_pin.value == 0
+        except Exception:
+            return False
 
     # internal helpers:
     def _init_adc(self) -> None:
@@ -99,6 +120,14 @@ class MQ2Sensor:
         except (ImportError, AttributeError):
             self._adc = None
 
+    def _init_power_pin(self)  -> None:
+        try:
+            from machine import Pin
+            self._power_pin = Pin(DEFAULT_POWER_PIN, Pin.OUT)
+            self._power_pin.value(0)
+        except (ImportError, AttributeError):
+            self._power_pin = None
+    
     @staticmethod
     def normalize_mq2_reading(raw_val: int) -> int: # din cauza voltage divider-ului voltajul dat de mq2 e redus ca urmare trebuie sa normalizam valoarea data
         # pt putin context Vs = Vcc * R2 / (R1 + R2), unde noi avem Vcc = 5V, R1 = 10k, R2 = 15k, Vs =  3V (nu 3.3V ca sa lasam un pic de gap)

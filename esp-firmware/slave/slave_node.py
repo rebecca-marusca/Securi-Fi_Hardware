@@ -46,25 +46,22 @@ class SlaveNode(SecuriFiNode):
         command = cmd.get("cmd")
 
         if command == "arm":
-            success = self._resume_sensing()
-            if success:
-                self._state = self.STATE_ARMED
-                print(f"[{self._node_id}] ARMED")
-            else:
-                print(f"[{self._node_id}] Failed to arm — staying in current state")
-            self._send_confirmation_to_master(armed=success, success=success)
+                success = self._resume_sensing() and self._mq2.power_switch(True)
+                if success:
+                    self._state = self.STATE_ARMED
+                    print(f"[{self._node_id}] ARMED")
+                else:
+                    print(f"[{self._node_id}] Failed to arm — staying in current state")
+                self._send_confirmation_to_master(armed=success, success=success)
         elif command == "standby":
-            success = self._pause_sensing()
-            self._state = self.STATE_STANDBY
-            print(f"[{self._node_id}] STANDBY")
-            self._send_confirmation_to_master(armed=False, success=success)
+                success = self._pause_sensing() and self._mq2.power_switch(False)
+                self._state = self.STATE_STANDBY
+                print(f"[{self._node_id}] STANDBY")
+                self._send_confirmation_to_master(armed=False, success=success)
         elif command == "sleep":
-            self._enter_deep_sleep()
+                self._enter_deep_sleep()
         elif command == "reboot":
-            self._soft_reboot("master_command")
-
-        
-
+                self._soft_reboot("master_command")
         
 
     def _send_confirmation_to_master(self, armed: bool, success: bool) -> None:

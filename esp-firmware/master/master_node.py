@@ -87,6 +87,7 @@ class MasterNode(SecuriFiNode):
             payload = json.loads(data.decode("utf-8"))
         except (ValueError, UnicodeError) as e:
             print(f"[{self._node_id}] Failed to parse slave packet from {mac}: {e}")
+            return
 
         if "confirmed" in payload:
             self._publish_config_confirmation(
@@ -154,7 +155,7 @@ class MasterNode(SecuriFiNode):
                 if command == "arm":
                         target = data.get("node_id")
                         if target == "master":
-                            success = self._resume_sensing()
+                            success = self._resume_sensing() and self._mq2.power_switch(True)
                             if success:
                                 self._state = self.STATE_ARMED
                             self._publish_config_confirmation(target, armed=success, success=success)
@@ -163,25 +164,23 @@ class MasterNode(SecuriFiNode):
                 elif command == "standby":
                         target = data.get("node_id")
                         if target == "master":
-                            success = self._pause_sensing()
+                            success = self._pause_sensing() and self._mq2.power_switch(False)
                             self._state = self.STATE_STANDBY
                             self._publish_config_confirmation(target, armed=False, success=success)
                         else:
                             self._send_espnow_to(target, {"cmd": "standby"})
-                        
                 elif command == "sleep":
-                        self._broadcast_espnow({"cmd": "sleep"})
-                        self._enter_master_deep_sleep()
-                elif command == "sleep_slave":
                         target = data.get("node_id")
-                        self._send_espnow_to(target, {"cmd": "sleep"})
+                        if target == "master":
+                            self._enter_master_deep_sleep()
+                        else:
+                            self._send_espnow_to(target, {"cmd": "sleep"})
                 elif command == "reboot":
-                        self._broadcast_espnow({"cmd": "reboot"})
-                        time.sleep(1)
-                        self._soft_reboot("server_command")
-                elif command == "reboot_slave":
                         target = data.get("node_id")
-                        self._send_espnow_to(target, {"cmd": "reboot"})
+                        if target == "master":
+                            self._soft_reboot("server command")
+                        else:
+                            self._send_espnow_to(target, {"cmd": "reboot"})
             except ValueError as e:
                 print(f"[{self._node_id}] Failed to subscribe to cmd topic: {e}")
 
@@ -223,7 +222,7 @@ class MasterNode(SecuriFiNode):
             try:
                 self._mqtt.connect()
 
-                cmd_topic = f"{MQTT_TOPIC}/cmd"
+                cmd_topic = f"securifi/config/command/{self._own_mac}"
                 self._mqtt.subscribe(cmd_topic)
 
                 print(f"[{self._node_id}] MQTT reconnected")
@@ -236,6 +235,9 @@ class MasterNode(SecuriFiNode):
         self._soft_reboot(self.ERR_MQTT_FAILED)
 
     def _publish_config_request(self, node_id: str) -> None:
+        if self._mqtt is None:
+            return
+        
         topic = f"securifi/config/request/{self._own_mac}"
         payload = json.dumps({
             "node_id": node_id,
@@ -248,6 +250,9 @@ class MasterNode(SecuriFiNode):
             print(f"[{self._node_id}] Failed to send config request: {e}")
 
     def _publish_config_confirmation(self, node_id: str, armed: bool, success: bool) -> None:
+        if self._mqtt is None:
+            return
+        
         topic = f"securifi/config/confirm/{self._own_mac}"
         payload = json.dumps({
             "node_id": node_id,
@@ -394,11 +399,11 @@ class MasterNode(SecuriFiNode):
         except (OSError, ValueError, IndexError, TypeError) as e:
             print(f"[{self._node_id}] Failed to send slave {target}: {e}")
 
-    def _enter_master_deep_sleep(self, sleep_ms: int) -> None:
+    def _enter_master_deep_sleep(self) -> None:
         if self._mqtt is not None:
             try:
                 self._mqtt.disconnect()
             except OSError:
                 pass
-        self._enter_deep_sleep(sleep_ms=sleep_ms)
+        self._enter_deep_sleep()
 

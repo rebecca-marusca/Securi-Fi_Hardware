@@ -324,19 +324,15 @@ class SecuriFiNode:
         time.sleep(1)
         machine.reset()
 
-    def _enter_deep_sleep(self, sleep_ms: int = None) -> None:
+    def _enter_deep_sleep(self) -> None:
         print(f"[{self._node_id}] Entering deep sleep")  
         self.stop()
         time.sleep(0.5)
 
         try:
             import machine
-
-            if sleep_ms is not None:
-                machine.deepsleep(sleep_ms)
-            else:
-                wake_pin = machine.Pin(0, machine.Pin.IN, machine.Pin.PULL_UP)
-                machine.wake_on_ext0(pin=wake_pin, level=0)
-                machine.deepsleep()
+            wake_pin = machine.Pin(0, machine.Pin.IN, machine.Pin.PULL_UP)
+            machine.wake_on_ext0(pin=wake_pin, level=0)
+            machine.deepsleep()
         except (OSError, ImportError) as e:
             print(f"[{self._node_id}] Failed to enter deepsleep: {e}")
