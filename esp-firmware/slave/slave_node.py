@@ -52,24 +52,27 @@ class SlaveNode(SecuriFiNode):
                     print(f"[{self._node_id}] ARMED")
                 else:
                     print(f"[{self._node_id}] Failed to arm — staying in current state")
-                self._send_confirmation_to_master(armed=success, success=success)
+                self._send_confirmation_to_master(success=success, arm=True)
         elif command == "standby":
                 success = self._pause_sensing() and self._mq2.power_switch(False)
                 self._state = self.STATE_STANDBY
                 print(f"[{self._node_id}] STANDBY")
-                self._send_confirmation_to_master(armed=False, success=success)
+                self._send_confirmation_to_master(success=success, disarm=True)
         elif command == "sleep":
+                self._send_confirmation_to_master(success=True, deep_sleep=True)
                 self._enter_deep_sleep()
         elif command == "reboot":
                 self._soft_reboot("master_command")
         
 
-    def _send_confirmation_to_master(self, armed: bool, success: bool) -> None:
+    def _send_confirmation_to_master(self, success: bool, arm: bool = False, disarm: bool = False, deep_sleep: bool = False) -> None:
         payload = json.dumps({
             "type": "confirm",
             "node_id": self._node_id,
-            "armed": armed,
-            "confirmed": success
+            "arm": arm,
+            "disarm": disarm,
+            "deep_sleep": deep_sleep,
+            "success": success
         })
         self._espnow.send(self._master_mac_bytes, payload.encode("utf-8"))
 

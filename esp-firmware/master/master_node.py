@@ -92,7 +92,9 @@ class MasterNode(SecuriFiNode):
         if "confirmed" in payload:
             self._publish_config_confirmation(
                 node_id=state.node_id,
-                armed=payload.get("armed", False),
+                arm=payload.get("armed", False),
+                disarm=payload.get("disarm", False),
+                deep_sleep=payload.get("deep_sleep", False),
                 success=payload.get("confirmed", False)
             )
 
@@ -158,7 +160,7 @@ class MasterNode(SecuriFiNode):
                             success = self._resume_sensing() and self._mq2.power_switch(True)
                             if success:
                                 self._state = self.STATE_ARMED
-                            self._publish_config_confirmation(target, armed=success, success=success)
+                            self._publish_config_confirmation(target, success=success, arm=True)
                         else:
                             self._send_espnow_to(target, {"cmd": "arm"})
                 elif command == "standby":
@@ -166,7 +168,7 @@ class MasterNode(SecuriFiNode):
                         if target == "master":
                             success = self._pause_sensing() and self._mq2.power_switch(False)
                             self._state = self.STATE_STANDBY
-                            self._publish_config_confirmation(target, armed=False, success=success)
+                            self._publish_config_confirmation(target, success=success, disarm=True)
                         else:
                             self._send_espnow_to(target, {"cmd": "standby"})
                 elif command == "sleep":
@@ -178,7 +180,7 @@ class MasterNode(SecuriFiNode):
                 elif command == "reboot":
                         target = data.get("node_id")
                         if target == "master":
-                            self._soft_reboot("server command")
+                            success = self._soft_reboot("server command")
                         else:
                             self._send_espnow_to(target, {"cmd": "reboot"})
             except ValueError as e:
@@ -249,7 +251,7 @@ class MasterNode(SecuriFiNode):
         except OSError as e:
             print(f"[{self._node_id}] Failed to send config request: {e}")
 
-    def _publish_config_confirmation(self, node_id: str, armed: bool, success: bool) -> None:
+    def _publish_config_confirmation(self, node_id: str, success: bool, arm: bool = False, disarm: bool = False, deep_sleep: bool = False) -> None:
         if self._mqtt is None:
             return
         
@@ -257,12 +259,14 @@ class MasterNode(SecuriFiNode):
         payload = json.dumps({
             "node_id": node_id,
             "master_mac": self._own_mac,
-            "armed": armed,
+            "arm": arm,
+            "disarm": disarm,
+            "deep_sleep": deep_sleep,
             "success": success
         })
         try:
             self._mqtt.publish(topic, payload)
-            print(f"[{self._node_id}] Config confirmation: node={node_id}, armed={armed}, success={success}")
+            print(f"[{self._node_id}] Config confirmation: node={node_id}, arm={arm}, disarm={disarm}, deep_sleep={deep_sleep}, success={success}")
         except OSError as e:
             print(f"[{self._node_id}] Failed to send config confirmation: {e}")
 
@@ -400,10 +404,13 @@ class MasterNode(SecuriFiNode):
             print(f"[{self._node_id}] Failed to send slave {target}: {e}")
 
     def _enter_master_deep_sleep(self) -> None:
-        if self._mqtt is not None:
+        success = True
+        if self._mqtt is not None: 
             try:
                 self._mqtt.disconnect()
             except OSError:
+                success = False
                 pass
+        self._publish_config_confirmation(self._node_id,success=success, deep_sleep=True)
         self._enter_deep_sleep()
 
