@@ -12,6 +12,7 @@ from .traffic_generator import TrafficGenerator
 from .csi_capture import CSICapture
 from .hardware.gas.mq2 import MQ2Sensor
 from .hardware.battery.battery import BatteryMonitor
+from .hardware.buzzer.buzzer import Buzzer
 
 WIFI_TIMEOUT_SECONDS = 20
 WATCHDOG_SECONDS = 60
@@ -103,6 +104,7 @@ class SecuriFiNode:
         self._tg_rate = traffic_rate_pps
         self._traffic_gen: TrafficGenerator = None
         self._csi_capture: CSICapture = None
+        self._buzzer = Buzzer()
 
         self._current_reading: NodeReading = None
 
@@ -206,6 +208,9 @@ class SecuriFiNode:
                     movement_pct, state = self._detector.get_reading()
                     mq2_reading = self._mq2.read()
                     battery_reading = self._battery.read()
+
+                    self._buzzer.toggle_buzzer(movement_pct >= 140)
+                    self._buzzer.gas_alarm(mq2_reading.gas_detected)
 
                     self._current_reading = NodeReading(
                         node_id=self._node_id,
@@ -324,6 +329,7 @@ class SecuriFiNode:
         time.sleep(1)
         machine.reset()
 
+    #NOTE, pin needs to be the same as the one in button.py
     def _enter_deep_sleep(self) -> None:
         print(f"[{self._node_id}] Entering deep sleep")  
         self.stop()
@@ -331,7 +337,7 @@ class SecuriFiNode:
 
         try:
             import machine
-            wake_pin = machine.Pin(0, machine.Pin.IN, machine.Pin.PULL_UP)
+            wake_pin = machine.Pin(3, machine.Pin.IN, machine.Pin.PULL_UP)
             machine.wake_on_ext0(pin=wake_pin, level=0)
             machine.deepsleep()
         except (OSError, ImportError) as e:

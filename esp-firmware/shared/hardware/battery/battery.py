@@ -1,6 +1,6 @@
 import time
-
-DEFAULT_ADC_PIN = 3
+#TODO fix it showing 0
+DEFAULT_ADC_PIN = 0
 SAMPLE_COUNT = 10
 MAX_JUMP_PCT = 15
 EMA_ALPHA = 0.3
@@ -97,4 +97,4 @@ class BatteryMonitor:
                 span = v_high - v_low
                 frac = (voltage - v_low) / span if span else 0
                 return int(p_low + frac * (p_high - p_low))
-        return 0  # Fallback, should not reach here
+        return -1  # Fallback, should not reach here

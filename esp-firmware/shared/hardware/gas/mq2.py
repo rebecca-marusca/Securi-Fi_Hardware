@@ -3,9 +3,9 @@
 import time 
 
 WARMUP_SECONDS = 30
-DEFAULT_ADC_PIN = 0
+DEFAULT_ADC_PIN = 1
 DEFAULT_THRESHOLD = 1500
-DEFAULT_POWER_PIN = 5
+DEFAULT_POWER_PIN = 2
 CONSECUTIVE_TRIGGER_COUNT = 3
 
 
@@ -88,22 +88,22 @@ class MQ2Sensor:
     def last_reading(self) -> MQ2Reading:
         return MQ2Reading(raw_value=self._last_raw, gas_detected=self._last_gas_detected, is_ready=self.is_ready)
 
-    def power_switch(self, switch: bool) -> None:
+    def power_switch(self, switch: bool) -> bool:
         if self._power_pin is None:
-            return
+            return False
         try:
             if switch:
                 self._power_pin.value(1)
                 if self._warmup_start is None:
                     self._warmup_start = time.time()
-                return self._power_pin.value == 1
+                return self._power_pin.value() == 1
             else:
                 self._power_pin.value(0)
                 self._warmup_start = 0
                 self._consecutive_count = 0
                 self._last_raw = 0
                 self._last_gas_detected = False
-                return self._power_pin.value == 0
+                return self._power_pin.value() == 0
         except Exception:
             return False
 

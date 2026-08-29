@@ -1,3 +1,5 @@
+#battery 0 mq2 -r 1 -p 2 button 3 buzzer 8
+
 # wifi:
 WIFI_SSID = "SecuriFi-Hub" # TODO
 WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07" # TODO
@@ -29,7 +31,7 @@ GAIN_LOCK_PACKETS = 100
 THRESHOLD_MULT = 2.3 # TODO
 
 # mq2
-MQ2_PIN = 0 # TODO
+MQ2_PIN = 1 # TODO
 MQ2_THRESHOLD = 1500 # TODO
 
 DETECTION_WINDOW = 10
@@ -37,7 +39,7 @@ DETECTION_MIN_HITS = 7
 DETECTION_PROBABILITY_THRESHOLD = 0.7
 
 # battery
-BATTERY_PIN = 3
+BATTERY_PIN = 0
 
 # watchdog
 WATCHDONG_SECONDS = 60

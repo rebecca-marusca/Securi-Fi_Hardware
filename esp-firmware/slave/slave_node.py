@@ -1,7 +1,8 @@
 import asyncio
 import json
 
-from  shared.securifi_node import SecuriFiNode
+from shared.securifi_node import SecuriFiNode
+from shared.hardware.button.button import Button
 from config import MASTER_MAC, ESPNOW_TX_INTERVAL_MS, ESPNOW_CHANNEL, ESPNOW_MAX_RETRIES
 
 
@@ -12,6 +13,7 @@ class SlaveNode(SecuriFiNode):
         self._master_mac = master_mac
         self._master_mac_bytes = self._parse_mac(self._master_mac) if master_mac else None
         self._espnow = None
+        self._button = Button()
 
         self._tx_success = 0
         self._tx_failed = 0
@@ -20,7 +22,7 @@ class SlaveNode(SecuriFiNode):
     # hook:
     def _subclass_coroutines(self) -> list:
         self._init_espnow()
-        return [self._loop_espnow_tx(), self._loop_espnow_rx(), self._loop_request_state()]
+        return [self._loop_espnow_tx(), self._loop_espnow_rx(), self._loop_request_state(), self._loop_button_poll()]
 
 
     # esp-now:
@@ -52,26 +54,24 @@ class SlaveNode(SecuriFiNode):
                     print(f"[{self._node_id}] ARMED")
                 else:
                     print(f"[{self._node_id}] Failed to arm — staying in current state")
-                self._send_confirmation_to_master(success=success, arm=True)
+                self._send_confirmation_to_master(success=success, cmd="arm")
         elif command == "standby":
                 success = self._pause_sensing() and self._mq2.power_switch(False)
                 self._state = self.STATE_STANDBY
                 print(f"[{self._node_id}] STANDBY")
-                self._send_confirmation_to_master(success=success, disarm=True)
+                self._send_confirmation_to_master(success=success, cmd="disarm")
         elif command == "sleep":
-                self._send_confirmation_to_master(success=True, deep_sleep=True)
+                self._send_confirmation_to_master(success=True, cmd="deep_sleep")
                 self._enter_deep_sleep()
         elif command == "reboot":
                 self._soft_reboot("master_command")
         
 
-    def _send_confirmation_to_master(self, success: bool, arm: bool = False, disarm: bool = False, deep_sleep: bool = False) -> None:
+    def _send_confirmation_to_master(self, success: bool, cmd: str) -> None:
         payload = json.dumps({
             "type": "confirm",
             "node_id": self._node_id,
-            "arm": arm,
-            "disarm": disarm,
-            "deep_sleep": deep_sleep,
+            "cmd": cmd,
             "success": success
         })
         self._espnow.send(self._master_mac_bytes, payload.encode("utf-8"))
@@ -168,6 +168,25 @@ class SlaveNode(SecuriFiNode):
 
         return json.dumps(data).encode("utf-8") # dict -> str -> bytes ca esp-now poate transmite numai bytes
 
+    async def _loop_button_poll(self) -> None:
+        while self._running:
+            result = self._button.press_check()
+            if result == "long":
+                self._on_long_press()
+            elif result == "short":
+                self._on_short_press()
+            await asyncio.sleep_ms(50)
+    
+    def _on_short_press(self) -> None:
+        print(f"[{self._node_id}] Button: entering deep sleep")
+        self._send_confirmation_to_master(success=True, cmd="deep_sleep")
+        self._enter_deep_sleep()
+    
+    def _on_long_press(self) -> None:
+        print(f"[{self._node_id}] Button: long press - entering boot mode")
+        #TODO enter boot mode in onboarding
+        self._soft_reboot("onboarding_request")
+    
 
     # helper:
     @staticmethod
