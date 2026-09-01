@@ -1,8 +1,8 @@
 #battery 0 mq2 -r 1 -p 2 button 3 buzzer 8
 
 # wifi:
-WIFI_SSID = "SecuriFi-Hub" # TODO
-WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07" # TODO
+WIFI_SSID = "placeholder" # TODO
+WIFI_PASSWORD = "12345678" # TODO
 
 # mqtt:
 MQTT_BROKER = "192.168.137.1" # TODO
@@ -20,7 +20,8 @@ MQTT_RECONNECT_ATTEMPTS = 3
 ESPNOW_CHANNEL = None # TODO
 SLAVE_MACS = [
     "58:E6:C5:12:04:C8", # COM4
-    "58:E6:C5:12:04:E0" # COM7
+    "58:E6:C5:12:04:E0", # COM7
+    "58:E6:C5:12:07:A4" # COM5
 ] # TODO
 
 SLAVE_TIMEOUT_MS = 2000

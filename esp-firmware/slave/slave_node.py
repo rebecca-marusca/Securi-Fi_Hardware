@@ -105,6 +105,10 @@ class SlaveNode(SecuriFiNode):
                 result = self._espnow.recv(0) 
                 if result is not None:  
                     mac, data = result
+                    if mac is None or data is None:
+                        await asyncio.sleep_ms(10)
+                        continue
+
                     try:
                         cmd = json.loads(data.decode("utf-8"))
                         self._handle_espnow_command(cmd)
@@ -119,6 +123,7 @@ class SlaveNode(SecuriFiNode):
         if self._espnow is None or self._master_mac_bytes is None:
             return
 
+        initial_state = self._state
         for attempt in range(3):
             try:
                 payload = json.dumps({"cmd": "state_request"}).encode("utf-8")
@@ -129,8 +134,10 @@ class SlaveNode(SecuriFiNode):
 
             await asyncio.sleep_ms(1000)
 
-            if self._state == self.STATE_ARMED:
+            if self._state != initial_state:
                 return
+
+        print(f"[{self._node_id}] No response from master, staying in standby")
         
     async def _send_with_retry(self, payload: bytes) -> None:
         if self._espnow is None:

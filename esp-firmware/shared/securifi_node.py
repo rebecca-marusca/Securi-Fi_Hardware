@@ -137,6 +137,8 @@ class SecuriFiNode:
         self._router_ip = wlan.ifconfig()[2]
         self._router_mac = self._resolve_router_mac(self._router_ip)
 
+        self._on_wifi_connected()
+
         self._start_sensing()
         self._wait_for_calibration()
 
@@ -146,6 +148,9 @@ class SecuriFiNode:
         
 
         asyncio.run(self._main_loop())
+
+    def _on_wifi_connected(self) -> None:
+        pass
 
     def stop(self) -> None:
         self._running = False
@@ -303,6 +308,7 @@ class SecuriFiNode:
         self._state = self.STATE_CALIBRATING
         print(f"[{self._node_id}] Calibrating...")
         start = time.time()
+        last_mqtt_ping = time.time()
 
         while not self._detector.is_calibrated:
             elapsed = int(time.time() - start)
@@ -310,13 +316,26 @@ class SecuriFiNode:
             if elapsed > self.CALIBRATION_TIMEOUT_S:
                 self._soft_reboot(self.ERR_CALIBRATION_FAILED)
 
-            
-            print(f"[{self._node_id}] Calibrating... {elapsed}s / {self.CALIBRATION_TIMEOUT_S}s "
-                 f"(captured={self._csi_capture.packets_captured}, "
-                 f"filtered={self._csi_capture.packets_filtered}, "
-                 f"malformed={self._csi_capture.packets_malformed}, "
-                 f"sent={self._traffic_gen.packets_sent}, "
-                 f"dropped={self._traffic_gen.packets_dropped})")
+            try:
+                print(f"[{self._node_id}] Calibrating... {elapsed}s / {self.CALIBRATION_TIMEOUT_S}s "
+                    f"(captured={self._csi_capture.packets_captured}, "
+                    f"filtered={self._csi_capture.packets_filtered}, "
+                    f"malformed={self._csi_capture.packets_malformed}, "
+                    f"sent={self._traffic_gen.packets_sent}, "
+                    f"dropped={self._traffic_gen.packets_dropped})")
+            except Exception as e:
+                print(f"[{self._node_id}] Error printing calibration status: {e}")
+                pass
+
+            if hasattr(self, "_mqtt") and time.time() - last_mqtt_ping >= 10:
+                last_mqtt_ping = time.time()
+                if self._mqtt is None:
+                    self._init_mqtt()
+                else:
+                    try:
+                        self._mqtt.ping() 
+                    except OSError:
+                        self._mqtt = None
 
             time.sleep(0.5)
 

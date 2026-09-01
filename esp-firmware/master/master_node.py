@@ -7,7 +7,7 @@ from shared.securifi_node import SecuriFiNode, NodeReading
 from shared.hardware.button.button import Button
 from config import MQTT_BROKER, MQTT_PORT, MQTT_PASSWORD, MQTT_USERNAME, MQTT_TOPIC, MQTT_CLIENT_ID, MQTT_PUBLISH_INTERVAL_MS, ESPNOW_CHANNEL, SLAVE_MACS, SLAVE_TIMEOUT_MS, DETECTION_PROBABILITY_THRESHOLD, MQTT_RECONNECT_ATTEMPTS
 #TODO timestamp to real time
-#TODO fix success being always false
+#TODO figure out freaking mqtt
 class SlaveState:
     __slots__ = ("node_id", "last_seen_ms", "reading")
 
@@ -33,10 +33,10 @@ class MasterNode(SecuriFiNode):
         self._own_mac: str = None
         self._armed: bool = False
 
+        self._mqtt_subscribed = False
+
     def _subclass_coroutines(self) -> list:
-        self._own_mac = self._read_own_mac()
         self._init_espnow()
-        self._init_mqtt()
         self._publish_config_request(self._node_id)
         for state in self._slave_states.values():
             self._publish_config_request(state.node_id)
@@ -46,6 +46,10 @@ class MasterNode(SecuriFiNode):
             self._loop_mqtt_commands(),
             self._loop_button_poll()
         ]
+
+    def _on_wifi_connected(self) -> None:
+        self._own_mac = self._read_own_mac()
+        self._init_mqtt()
 
     def _init_espnow(self) -> None:
         try:
@@ -75,6 +79,9 @@ class MasterNode(SecuriFiNode):
                 result = self._espnow.recv(0)
                 if result is not None:
                     mac, data = result
+                    if mac is None or data is None:
+                        await asyncio.sleep_ms(10)
+                        continue
                     self._handle_slave_packet(mac, data)
             except OSError as e:
                 print(f"[{self._node_id}] ESP-NOW recv error: {e}")
@@ -120,10 +127,18 @@ class MasterNode(SecuriFiNode):
             from umqtt.simple import MQTTClient
             self._mqtt = MQTTClient(client_id=MQTT_CLIENT_ID, server=MQTT_BROKER, port=MQTT_PORT, user=MQTT_USERNAME or None, password=MQTT_PASSWORD or None, keepalive=30)
             self._mqtt.connect()
+            print(f"[{self._node_id}] mqtt attrs: {dir(self._mqtt)}")
+            if hasattr(self._mqtt, "sock") and self._mqtt.sock is not None:
+                try:
+                    self._mqtt.sock.settimeout(2)
+                except Exception as e:
+                    print(f"[{self._node_id}] Couldn't set socket timeout: {e}")
+
             print(f"[{self._node_id}] MQTT connected to {MQTT_BROKER}:{MQTT_PORT}")
+            print(f"[{self._node_id}] own mac: {self._own_mac}")
         except ImportError:
             self._mqtt = None
-        except OSError as e:
+        except (OSError,IndexError) as e: 
             print(f"[{self._node_id}] MQTT connection failed: {e}")
             self._mqtt = None
 
@@ -134,9 +149,12 @@ class MasterNode(SecuriFiNode):
         print(f"[{self._node_id}] Starting MQTT publish loop")
 
         while self._running:
-            if self._state == self.STATE_ARMED:
-                if self._mqtt is None:
-                    self._init_mqtt()
+            if self._state != self.STATE_ARMED:
+                await asyncio.sleep_ms(MQTT_PUBLISH_INTERVAL_MS)
+                continue
+
+            if self._mqtt is None:
+                pass
 
             own_reading = self.get_reading()
             if own_reading is not None and self._mqtt is not None:
@@ -159,7 +177,10 @@ class MasterNode(SecuriFiNode):
                 if command == "arm":
                         target = data.get("node_id")
                         if target == "master":
-                            success = self._resume_sensing() and self._mq2.power_switch(True)
+                            sensing = self._start_sensing()
+                            mq2_state = self._mq2.power_switch(True)
+                            print(f"[{self._node_id}] sensing: {sensing}, mq2 on: {mq2_state}")
+                            success = sensing and mq2_state
                             if success:
                                 self._state = self.STATE_ARMED
                             self._publish_config_confirmation(target, success=success, cmd="arm")
@@ -168,7 +189,12 @@ class MasterNode(SecuriFiNode):
                 elif command == "standby":
                         target = data.get("node_id")
                         if target == "master":
-                            success = self._pause_sensing() and self._mq2.power_switch(False) and self._buzzer.toggle_buzzer(False) and self._buzzer.gas_alarm(False)
+                            sensing = self._pause_sensing()
+                            mq2_state = self._mq2.power_switch(False)
+                            buzzer_mvt = self._buzzer.toggle_buzzer(False)
+                            buzzer_gas = self._buzzer.gas_alarm(False)
+                            print(f"[{self._node_id}] sensing paused: {sensing}, mq2 off: {mq2_state}, buzzer: {buzzer_mvt}, {buzzer_gas}")
+                            success = sensing and mq2_state and buzzer_mvt and buzzer_gas
                             self._state = self.STATE_STANDBY
                             self._publish_config_confirmation(target, success=success, cmd="disarm")
                         else:
@@ -189,17 +215,27 @@ class MasterNode(SecuriFiNode):
             except ValueError as e:
                 print(f"[{self._node_id}] Failed to subscribe to cmd topic: {e}")
 
-        if self._mqtt is None:
-            return 
-
-        try: 
-            self._mqtt.set_callback(on_message)
-            self._mqtt.subscribe(cmd_topic)
-            print(f"[{self._node_id}] Subscribed to {cmd_topic}")
-        except OSError:
-            return
 
         while self._running: 
+            if self._mqtt is None:
+                self._init_mqtt()
+                if self._mqtt is None:
+                    await asyncio.sleep_ms(2000)
+                    continue
+                self._mqtt_subscribed = False
+
+            if not self._mqtt_subscribed:
+                try:
+                    self._mqtt.set_callback(on_message)
+                    self._mqtt.subscribe(cmd_topic)
+                    self._mqtt_subscribed = True
+                    print(f"[{self._node_id}] Subscribed to {cmd_topic}")
+                except OSError:
+                    self._mqtt = None
+                    self._mqtt_subscribed = False
+                    await asyncio.sleep_ms(2000)
+                    continue
+
             try:
                 self._mqtt.check_msg()
 
@@ -207,18 +243,33 @@ class MasterNode(SecuriFiNode):
                     self._mqtt.ping()
                     last_ping = time.ticks_ms()
             except OSError:
-                await self._mqtt_reconnect()
+                self._mqtt_subscribed = False
+
+                if await self._mqtt_reconnect():
+                    try:
+                        self._mqtt.set_callback(on_message)
+
+                        cmd_topic = f"securifi/config/command/{self._own_mac}"
+                        self._mqtt.subscribe(cmd_topic)
+
+                        print(f"[{self._node_id}] Subscribed to {cmd_topic}")
+
+                    except (OSError, AssertionError) as e:
+                        print(f"[{self._node_id}] MQTT resubscribe failed: {e}")
+                        self._mqtt = None
             await asyncio.sleep_ms(100)
 
-    async def _mqtt_publish(self, payload: bytes) -> None: 
+    async def _mqtt_publish(self, payload: bytes) -> None:
         if self._mqtt is None:
             print(f"[{self._node_id}] Didn't publish: {payload.decode()}")
-            return 
+            return
 
-        try: 
+        try:
+            print(f"[{self._node_id}] before publish pub")
             self._mqtt.publish(MQTT_TOPIC, payload)
-        except OSError:
-            await self._mqtt_reconnect()
+        except OSError as e:
+            print(f"[{self._node_id}] MQTT publish failed: {e}")
+            self._mqtt = None
 
     async def _mqtt_reconnect(self) -> None: 
         print(f"[{self._node_id}] MQTT lost, attempting reconnect")
@@ -226,18 +277,15 @@ class MasterNode(SecuriFiNode):
             await asyncio.sleep(2)
             try:
                 self._mqtt.connect()
-
-                cmd_topic = f"securifi/config/command/{self._own_mac}"
-                self._mqtt.subscribe(cmd_topic)
-
                 print(f"[{self._node_id}] MQTT reconnected")
-                return
-            except OSError:
+                return True
+            except (OSError, IndexError):
                 print(f"[{self._node_id}] MQTT reconnect attempt {attempt + 1} failed")
 
         print(f"[{self._node_id}] MQTT reconnect failed, soft rebooting the master...")
         await asyncio.sleep(1)
         self._soft_reboot(self.ERR_MQTT_FAILED)
+        return False
 
     def _publish_config_request(self, node_id: str) -> None:
         if self._mqtt is None:
@@ -249,7 +297,9 @@ class MasterNode(SecuriFiNode):
             "master_mac": self._own_mac
         })
         try:
+            print(f"[{self._node_id}] before publish request")
             self._mqtt.publish(topic, payload)
+            print(f"[{self._node_id}] after publish")
             print(f"[{self._node_id}] Config request sent for node {node_id}")
         except OSError as e:
             print(f"[{self._node_id}] Failed to send config request: {e}")
@@ -266,7 +316,9 @@ class MasterNode(SecuriFiNode):
             "success": success
         })
         try:
+            print(f"[{self._node_id}] before publish confirm")
             self._mqtt.publish(topic, payload)
+            print(f"[{self._node_id}] after publish")
             print(f"[{self._node_id}] Config confirmation: node={node_id}, cmd={cmd}, success={success}")
         except OSError as e:
             print(f"[{self._node_id}] Failed to send config confirmation: {e}")
