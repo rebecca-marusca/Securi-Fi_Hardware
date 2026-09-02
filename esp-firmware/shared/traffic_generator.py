@@ -37,8 +37,16 @@ class TrafficGenerator:
         self._packets_sent = 0
         self._packets_dropped = 0
 
+        self._paused = False
+
 
 # Outside functions:
+    def pause(self) -> None:
+        self._paused = True
+
+    def resume(self) -> None:
+        self._paused = False
+
     @property
     def packets_sent(self) -> int:
         return self._packets_sent
@@ -76,6 +84,10 @@ class TrafficGenerator:
             sock = self._open_socket()
 
             while self._running:
+                if self._paused:
+                    time.sleep_ms(100)
+                    continue
+                
                 start_ms = time.ticks_ms()
 
                 try:

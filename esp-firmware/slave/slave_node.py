@@ -1,6 +1,6 @@
 import asyncio
 import json
-
+#TODO buzzer commands
 from shared.securifi_node import SecuriFiNode
 from shared.hardware.button.button import Button
 from config import MASTER_MAC, ESPNOW_TX_INTERVAL_MS, ESPNOW_CHANNEL, ESPNOW_MAX_RETRIES
@@ -13,7 +13,6 @@ class SlaveNode(SecuriFiNode):
         self._master_mac = master_mac
         self._master_mac_bytes = self._parse_mac(self._master_mac) if master_mac else None
         self._espnow = None
-        self._button = Button()
 
         self._tx_success = 0
         self._tx_failed = 0
@@ -48,7 +47,9 @@ class SlaveNode(SecuriFiNode):
         command = cmd.get("cmd")
 
         if command == "arm":
-                success = self._resume_sensing() and self._mq2.power_switch(True)
+                sensing = self._resume_sensing()
+                mq2_state = self._mq2.power_switch(True)
+                success = sensing and mq2_state
                 if success:
                     self._state = self.STATE_ARMED
                     print(f"[{self._node_id}] ARMED")
@@ -56,7 +57,9 @@ class SlaveNode(SecuriFiNode):
                     print(f"[{self._node_id}] Failed to arm — staying in current state")
                 self._send_confirmation_to_master(success=success, cmd="arm")
         elif command == "standby":
-                success = self._pause_sensing() and self._mq2.power_switch(False)
+                sensing = self._pause_sensing()
+                mq2_state = self._mq2.power_switch(False)
+                success = sensing and mq2_state
                 self._state = self.STATE_STANDBY
                 print(f"[{self._node_id}] STANDBY")
                 self._send_confirmation_to_master(success=success, cmd="disarm")

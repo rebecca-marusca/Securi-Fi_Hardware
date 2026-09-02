@@ -12,8 +12,12 @@ Securi-Fi_Nodes/
 ├── firmware/
 ├── slave_node/
 │   ├── shared/
+|   |   ├── hardware/
+|   |   |   ├── battery/
+|   |   |   |   └── battery.py
+|   |   |   └── gas/
+|   |   |       └── mq2.py
 │   │   ├── csi_capture.py
-│   │   ├── mq2.py
 │   │   ├── mvs_detector.py
 │   │   ├── securifi_node.py
 │   │   └── traffic_generator.py
@@ -760,7 +764,7 @@ def deploy_code(args):
         f"{Style.RESET_ALL}"
     )
 
-    shared_files = sorted(shared_dir.glob("*.py"))
+    shared_files = sorted(shared_dir.rglob("*.py"))
 
     if not shared_files:
         print(
@@ -770,8 +774,46 @@ def deploy_code(args):
         )
         sys.exit(1)
 
+    created_dirs = set()
+
     for f in shared_files:
-        print(f"  {f.name}")
+        rel_path = f.relative_to(shared_dir)
+        device_rel = str(rel_path).replace("\\", "/")
+        device_path = f":shared/{device_rel}"
+
+        built = "shared"
+        for part in rel_path.parts[:-1]:
+            built += f"/{part}"
+
+            if built not in created_dirs:
+                subprocess.run(
+                    [
+                        'mpremote',
+                        'connect',
+                        port,
+                        'mkdir',
+                        f':{built}'
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False
+                )
+
+                subprocess.run(
+                    [
+                        'mpremote',
+                        'connect',
+                        port,
+                        'exec',
+                        f"open('{built}/__init__.py','w').close()"
+                    ],
+                    check=True,
+                    capture_output=True
+                )
+
+                created_dirs.add(built)
+        
+        print(f"  {device_path}")
 
         subprocess.run(
             [
@@ -780,7 +822,7 @@ def deploy_code(args):
                 port,
                 'cp',
                 str(f),
-                f':shared/{f.name}'
+                device_path
             ],
             check=True,
             capture_output=True
@@ -1139,7 +1181,7 @@ def verify_installation(args):
             "csi_capture.py",
             "mvs_detector.py",
             "traffic_generator.py",
-            "mq2.py"
+            "hardware"
         ):
             if required not in listing:
                 print(

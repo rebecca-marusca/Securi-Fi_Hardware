@@ -1,6 +1,7 @@
 import math
 import struct
 import network
+import time
 
 # csi_read() on this firmware returns a 24-element list:
 #   [0]  RSSI 
@@ -28,6 +29,22 @@ class CSICapture:
         self._packets_captured = 0
         self._packets_filtered = 0
         self._packets_malformed = 0
+
+    def pause(self) -> None:
+        if self._active:
+            try:
+                self._wlan.csi_enable()
+            except Exception:
+                pass
+            self._active = False
+
+    def resume(self) -> None:
+        if not self._active:
+            try:
+                self._wlan.csi_enable()
+                self._active = True
+            except Exception as e:
+                print(f"[CSICapture] Failed to resume: {e}")
 
     @property
     def packets_captured(self) -> int:
@@ -83,6 +100,9 @@ class CSICapture:
             return
 
         while self._running:
+            if not self._active:
+                time.sleep_ms(100)
+                continue
             try:
                 if not self._wlan.csi_available():
                     continue

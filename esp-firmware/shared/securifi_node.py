@@ -13,6 +13,7 @@ from .csi_capture import CSICapture
 from .hardware.gas.mq2 import MQ2Sensor
 from .hardware.battery.battery import BatteryMonitor
 from .hardware.buzzer.buzzer import Buzzer
+from .hardware.button.button import Button
 
 WIFI_TIMEOUT_SECONDS = 20
 WATCHDOG_SECONDS = 60
@@ -105,6 +106,7 @@ class SecuriFiNode:
         self._traffic_gen: TrafficGenerator = None
         self._csi_capture: CSICapture = None
         self._buzzer = Buzzer()
+        self._button = Button()
 
         self._current_reading: NodeReading = None
 
@@ -161,7 +163,7 @@ class SecuriFiNode:
 
     def _start_sensing(self) -> bool:
         if self._traffic_gen is not None or self._csi_capture is not None:
-            return True
+            return
 
         try:
             self._traffic_gen = TrafficGenerator(target_ip=self._router_ip, rate_pps=self._tg_rate)
@@ -174,33 +176,38 @@ class SecuriFiNode:
                 raise RuntimeError("CSI capture failed to activate")
 
             _thread.start_new_thread(self._csi_capture.run, ())
-            return True
+            return
         except (OSError, RuntimeError) as e:
             print(f"[{self._node_id}] Failed to start sensing: {e}")
             self._traffic_gen = None
             self._csi_capture = None
-            return False
+            return
 
     def _pause_sensing(self) -> bool:
         try:
             if self._traffic_gen:
-                self._traffic_gen.stop()
-                self._traffic_gen = None
+                self._traffic_gen.pause()
             if self._csi_capture:
-                self._csi_capture.stop()
-                self._csi_capture = None
+                self._csi_capture.pause()
             return True
         except Exception as e:
             print(f"[{self._node_id}] Error pausing sensing: {e}")
             return False
 
     def _resume_sensing(self) -> bool:
-        print(f"[{self._node_id}] Resuming sensing")
-        return self._start_sensing()
+        try:
+            if self._traffic_gen:
+                self._traffic_gen.resume()
+            if self._csi_capture:
+                self._csi_capture.resume()
+            return True
+        except Exception as e:
+            print(f"[{self._node_id}] Error resuming sensing: {e}")
+            return False
 
     # async:
     async def _main_loop(self) -> None:
-        coroutines = [self._loop_sensor_poll(), self._loop_watchdog()]
+        coroutines = [self._loop_sensor_poll(), self._loop_watchdog(), self._loop_buzzer_update()]
         coroutines.extend(self._subclass_coroutines())
 
         await asyncio.gather(*coroutines)
@@ -213,9 +220,6 @@ class SecuriFiNode:
                     movement_pct, state = self._detector.get_reading()
                     mq2_reading = self._mq2.read()
                     battery_reading = self._battery.read()
-
-                    self._buzzer.toggle_buzzer(movement_pct >= 140)
-                    self._buzzer.gas_alarm(mq2_reading.gas_detected)
 
                     self._current_reading = NodeReading(
                         node_id=self._node_id,
@@ -327,16 +331,16 @@ class SecuriFiNode:
                 print(f"[{self._node_id}] Error printing calibration status: {e}")
                 pass
 
-            if hasattr(self, "_mqtt") and time.time() - last_mqtt_ping >= 10:
-                last_mqtt_ping = time.time()
-                if self._mqtt is None:
-                    self._init_mqtt()
-                else:
-                    try:
-                        self._mqtt.ping() 
-                    except OSError:
-                        self._mqtt = None
+            if hasattr(self, "_mqtt") and self._mqtt is not None and time.time() - last_mqtt_ping >= 10:
+                try:
+                    self._mqtt.ping()
+                    last_mqtt_ping = time.time()
+                except OSError:
+                    pass # will be picked up and reconnected once the async loop starts i guess
 
+            result = self._button.press_check()
+            if result == "short":
+                self._enter_master_deep_sleep()
             time.sleep(0.5)
 
         self._state = self.STATE_STANDBY
@@ -348,6 +352,14 @@ class SecuriFiNode:
         time.sleep(1)
         machine.reset()
 
+    async def _loop_buzzer_update(self) -> None:
+        while self._running:
+            self._buzzer.update()
+            await asyncio.sleep_ms(50)
+
+    def _enter_master_deep_sleep(self) -> None:
+        self._enter_deep_sleep()
+
     #NOTE, pin needs to be the same as the one in button.py
     def _enter_deep_sleep(self) -> None:
         print(f"[{self._node_id}] Entering deep sleep")  
@@ -356,8 +368,10 @@ class SecuriFiNode:
 
         try:
             import machine
+            import esp32
             wake_pin = machine.Pin(3, machine.Pin.IN, machine.Pin.PULL_UP)
-            machine.wake_on_ext0(pin=wake_pin, level=0)
-            machine.deepsleep()
+            esp32.wake_on_gpio([wake_pin])
+            print(f"[{self._node_id}] Deep sleep configured, waking on GPIO 3 LOW")
+            machine.deepsleep(-1)
         except (OSError, ImportError) as e:
             print(f"[{self._node_id}] Failed to enter deepsleep: {e}")

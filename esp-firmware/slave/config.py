@@ -1,8 +1,8 @@
 #battery 0 mq2 -r 1 -p 2 button 3 buzzer 8
 
 # wifi
-WIFI_SSID = "placeholder" # TODO
-WIFI_PASSWORD = "12345678" # TODO
+WIFI_SSID = "SecuriFi-Hub" # TODO
+WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07" # TODO
 
 MASTER_MAC = "58:E6:C5:12:05:E0" # COM6 # TODO
 

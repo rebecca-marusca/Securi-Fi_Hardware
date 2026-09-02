@@ -1,11 +1,11 @@
 #battery 0 mq2 -r 1 -p 2 button 3 buzzer 8
 
 # wifi:
-WIFI_SSID = "placeholder" # TODO
-WIFI_PASSWORD = "12345678" # TODO
+WIFI_SSID = "SecuriFi-Hub" # TODO
+WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07" # TODO
 
 # mqtt:
-MQTT_BROKER = "192.168.137.1" # TODO
+MQTT_BROKER = "192.168.137.252" # TODO
 MQTT_PORT = 1883
 
 MQTT_USERNAME = ""
