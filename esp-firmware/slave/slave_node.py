@@ -1,6 +1,6 @@
 import asyncio
 import json
-#TODO buzzer commands
+
 from shared.securifi_node import SecuriFiNode
 from shared.hardware.button.button import Button
 from config import MASTER_MAC, ESPNOW_TX_INTERVAL_MS, ESPNOW_CHANNEL, ESPNOW_MAX_RETRIES
@@ -59,10 +59,20 @@ class SlaveNode(SecuriFiNode):
         elif command == "standby":
                 sensing = self._pause_sensing()
                 mq2_state = self._mq2.power_switch(False)
-                success = sensing and mq2_state
+                buzzer_off = self._buzzer.buzzer_stop()
+                success = sensing and mq2_state and buzzer_off
                 self._state = self.STATE_STANDBY
                 print(f"[{self._node_id}] STANDBY")
                 self._send_confirmation_to_master(success=success, cmd="disarm")
+        elif command == "buzzer_on_alarm":
+                success = self._buzzer.movement_alarm()
+                self._send_confirmation_to_master(success=success, cmd="buzzer_on_alarm")
+        elif command == "buzzer_on_warning":
+                success = self._buzzer.gas_alarm()
+                self._send_confirmation_to_master(success=success, cmd="buzzer_on_warning")
+        elif command == "buzzer_off":
+                success = self._buzzer.buzzer_stop()
+                self._send_confirmation_to_master(success=success, cmd="buzzer_off")
         elif command == "sleep":
                 self._send_confirmation_to_master(success=True, cmd="deep_sleep")
                 self._enter_deep_sleep()

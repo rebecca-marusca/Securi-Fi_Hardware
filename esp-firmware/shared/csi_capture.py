@@ -33,7 +33,7 @@ class CSICapture:
     def pause(self) -> None:
         if self._active:
             try:
-                self._wlan.csi_enable()
+                self._wlan.csi_disable()
             except Exception:
                 pass
             self._active = False

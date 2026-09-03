@@ -218,6 +218,7 @@ class SecuriFiNode:
             if self._state == self.STATE_ARMED and self._detector.is_calibrated:
                 try:
                     movement_pct, state = self._detector.get_reading()
+                    # print(f"[{self._node_id}] movement_pct={movement_pct} state={state}")
                     mq2_reading = self._mq2.read()
                     battery_reading = self._battery.read()
 

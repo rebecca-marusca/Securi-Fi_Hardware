@@ -282,12 +282,14 @@ class MasterNode(SecuriFiNode):
             return
 
         try:
+            print(f"[{self._node_id}] Publishing")
             self._mqtt.publish(MQTT_TOPIC, payload)
+            print(f"[{self._node_id}] Published")
         except OSError as e:
             print(f"[{self._node_id}] MQTT publish failed: {e}")
             self._mqtt = None
 
-    async def _mqtt_reconnect(self) -> None: 
+    async def _mqtt_reconnect(self) -> bool: 
         print(f"[{self._node_id}] MQTT lost, attempting reconnect")
         for attempt in range(MQTT_RECONNECT_ATTEMPTS):
             await asyncio.sleep(2)
@@ -453,7 +455,9 @@ class MasterNode(SecuriFiNode):
     # internal helpers:
     @staticmethod
     def _movement_to_probability(movement_pct: int) -> float:
-        return 0.0 # TODO
+        if movement_pct <= 0:
+            return 0.0
+        return min(movement_pct / 100.0, 1.0)
 
     @staticmethod
     def _parse_mac(mac_str: str) -> bytes:
@@ -469,7 +473,7 @@ class MasterNode(SecuriFiNode):
 
     def _broadcast_espnow(self, cmd: dict) -> None:
         payload = json.dumps(cmd).encode("utf-8")
-        for mac_bytes, state in self._slave_states.items():
+        for mac_bytes, state in self._slave_zstates.items():
             try:
                 self._espnow.send(mac_bytes, payload)
             except OSError as e:
@@ -477,9 +481,14 @@ class MasterNode(SecuriFiNode):
 
     def _send_espnow_to(self, target: str, cmd: dict) -> None: 
         try:
-            index = int(target) - 1
+            if not target.startswith("slave_"):
+                print(f"[{self._node_id}] Invalid slave target: {target}")
+                return
+            
+            index = int(target.split("_")[1]) - 1
+            print(f"[{self._node_id}] ESP-NOW index={index}")
             if index < 0 or index >= len(SLAVE_MACS):
-                print(f"[{self.node_id}] Invalid slave target: {target}, known slaves: {len(SLAVE_MACS)}")
+                print(f"[{self._node_id}] Invalid slave target: {target}, known slaves: {len(SLAVE_MACS)}")
                 return
 
             mac_bytes = self._parse_mac(SLAVE_MACS[index])

@@ -9,11 +9,11 @@ WINDOW_SIZE = 30 # TODO
 
 GAIN_LOCK_PACKETS = 100 # TODO
  
-THRESHOLD_MULTIPLIER = 1.8 # TODO
+THRESHOLD_MULTIPLIER = 1.0 # TODO
  
 MOTION_TRIGGER_PCT = 100 # TODO
-
-
+  
+ 
 class MVSDetector:
     def __init__(self):
         self._window: list = []
