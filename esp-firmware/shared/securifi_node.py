@@ -26,49 +26,48 @@ class NodeReading:
 
         "timestamp",
         "movement_pct",
-        "state",
+        "sensor_reading",
 
-        "gas_detected",
+        "report_type",
+        "warning_type",        
         "is_calibrated",
 
         "packets_sent",
         "packets_dropped",
         "pps",
 
-        "raw_mq2_reading",
-
         "battery_pct",
         "low_battery"
     )
 
-    def __init__(self, node_id: str, timestamp: int, movement_pct: int, state: str, gas_detected: bool, is_calibrated: bool, packets_sent: int, packets_dropped: int, pps: int, raw_mq2_reading: int, battery_pct: int, low_battery: bool):
+    def __init__(self, node_id: str, timestamp: int, movement_pct: int, state: str, warning_type: bool, is_calibrated: bool, packets_sent: int, packets_dropped: int, pps: int, sensor_reading: int, battery_pct: int, report_type: bool):
         self.node_id = node_id
 
         self.timestamp = timestamp
         self.movement_pct = movement_pct
         self.state = state
 
-        self.gas_detected = gas_detected
+        self.warning_type = warning_type
         self.is_calibrated = is_calibrated
 
         self.packets_sent = packets_sent
         self.packets_dropped = packets_dropped
         self.pps = pps
 
-        self.raw_mq2_reading = raw_mq2_reading
+        self.sensor_reading = sensor_reading
 
         self.battery_pct = battery_pct
-        self.low_battery = low_battery
+        self.report_type = report_type
 
     def __repr__(self): # cum trebuie reprezentat obiectul cand e printat gen NodeReading(id = ..., mvt = ..., . . .)
         return (
             f"NodeReading(id={self.node_id}, "
             f"mvt={self.movement_pct}%, "
-            f"state={self.state}, "
-            f"gas={self.gas_detected}, "
+            f"sensor={self.sensor_reading}, "
+            f"report={self.report_type}, "
+            f"warning={self.warning_type}, "
             f"cal={self.is_calibrated}, "
-            f"battery={self.battery_pct}%, "
-            f"low_battery={self.low_battery})"
+            f"battery={self.battery_pct}% "
         )
 
 
@@ -133,6 +132,8 @@ class SecuriFiNode:
         return self._current_reading
 
     def start(self) -> None:
+        from machine import WDT
+
         self._running = True
 
         wlan = self._connect_wifi()
@@ -212,7 +213,6 @@ class SecuriFiNode:
 
         await asyncio.gather(*coroutines)
 
-
     async def _loop_sensor_poll(self) -> None:
         while self._running:
             if self._state == self.STATE_ARMED and self._detector.is_calibrated:
@@ -227,14 +227,14 @@ class SecuriFiNode:
                         timestamp=int(time.time()),
                         movement_pct=movement_pct,
                         state=state,
-                        gas_detected=mq2_reading.gas_detected,
-                        raw_mq2_reading=mq2_reading.raw_value,
+                        report_type="low_battery" if battery_reading.is_low else None, #NOTE report_type ii pentru low battery, not transmitting, weak signal si sensor flat da deocamdata numa low batterry ii implementat
+                        warning_type="flame" if mq2_reading.gas_detected else None, #NOTE ar trebuii sa fie gas sau fire da fire nu exista oricum
+                        sensor_reading=mq2_reading.raw_value,
                         is_calibrated=True,
                         packets_sent=self._traffic_gen.packets_sent if self._traffic_gen else 0,
                         packets_dropped=self._traffic_gen.packets_dropped if self._traffic_gen else 0,
                         pps=self._tg_rate,
-                        battery_pct=battery_reading.percentage,
-                        low_battery=battery_reading.is_low
+                        battery_pct=battery_reading.percentage
                     )
 
                     self._last_valid_reading_ts = time.time()
@@ -313,7 +313,6 @@ class SecuriFiNode:
         self._state = self.STATE_CALIBRATING
         print(f"[{self._node_id}] Calibrating...")
         start = time.time()
-        last_mqtt_ping = time.time()
 
         while not self._detector.is_calibrated:
             elapsed = int(time.time() - start)
@@ -330,14 +329,6 @@ class SecuriFiNode:
                     f"dropped={self._traffic_gen.packets_dropped})")
             except Exception as e:
                 print(f"[{self._node_id}] Error printing calibration status: {e}")
-                pass
-
-            if hasattr(self, "_mqtt") and self._mqtt is not None and time.time() - last_mqtt_ping >= 10:
-                try:
-                    self._mqtt.ping()
-                    last_mqtt_ping = time.time()
-                except OSError:
-                    pass # will be picked up and reconnected once the async loop starts i guess
 
             result = self._button.press_check()
             if result == "short":
