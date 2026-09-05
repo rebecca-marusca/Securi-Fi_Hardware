@@ -367,8 +367,8 @@ class MasterNode(SecuriFiNode):
                     "node_id": state.node_id,
                     "movement_pct": r.get("mvt", 0),
                     "seonsor_reading": r.get("mq2", 0),
-                    "report_type":r.get("report", None),
-                    "warning_type": r.get("warning", None),
+                    "report_type":r.get("rep", None),
+                    "warning_type": r.get("war", None),
                     "battery_pct": r.get("bat", 0)
                 })
 

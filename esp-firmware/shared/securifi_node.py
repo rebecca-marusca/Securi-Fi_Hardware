@@ -228,7 +228,7 @@ class SecuriFiNode:
                         movement_pct=movement_pct,
                         state=state,
                         report_type="low_battery" if battery_reading.is_low else None, #NOTE report_type ii pentru low battery, not transmitting, weak signal si sensor flat da deocamdata numa low batterry ii implementat
-                        warning_type="flame" if mq2_reading.gas_detected else None, #NOTE ar trebuii sa fie gas sau fire da fire nu exista oricum
+                        warning_type="gas" if mq2_reading.gas_detected else None, #NOTE ar trebuii sa fie gas sau fire da fire nu exista oricum
                         sensor_reading=mq2_reading.raw_value,
                         is_calibrated=True,
                         packets_sent=self._traffic_gen.packets_sent if self._traffic_gen else 0,
