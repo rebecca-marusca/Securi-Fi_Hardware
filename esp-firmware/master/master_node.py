@@ -254,18 +254,20 @@ class MasterNode(SecuriFiNode):
                 self._mqtt_in_queue.clear()
 
             for data in pending:
-                self._handle_mqtt_command(data)
+                await self._handle_mqtt_command(data)
 
             await asyncio.sleep_ms(100)
 
-    def _handle_mqtt_command(self, data: dict) -> None:
+    async def _handle_mqtt_command(self, data: dict) -> None:
         command = data.get("cmd")
         target = data.get("node_id")
 
         if command == "arm":
             if target == "master":
                 sensing = self._resume_sensing()
+                await asyncio.sleep_ms(50)            
                 mq2_state = self._mq2.power_switch(True)
+                await asyncio.sleep_ms(50)            
                 print(f"[{self._node_id}] sensing: {sensing}, mq2 on: {mq2_state}")
                 success = sensing and mq2_state
                 if success:
@@ -273,10 +275,13 @@ class MasterNode(SecuriFiNode):
                 self._publish_config_confirmation(target, success=success, cmd="arm")
             else:
                 self._send_espnow_to(target, {"cmd": "arm"})
+
         elif command == "disarm":
             if target == "master":
                 sensing = self._pause_sensing()
+                await asyncio.sleep_ms(50)
                 mq2_state = self._mq2.power_switch(False)
+                await asyncio.sleep_ms(50)
                 buzzer_off = self._buzzer.buzzer_stop()
                 print(f"[{self._node_id}] sensing paused: {sensing}, mq2 off: {mq2_state}, buzzer: {buzzer_off}")
                 success = sensing and mq2_state and buzzer_off
@@ -284,36 +289,55 @@ class MasterNode(SecuriFiNode):
                 self._publish_config_confirmation(target, success=success, cmd="disarm")
             else:
                 self._send_espnow_to(target, {"cmd": "standby"})
-        elif command == "buzzer_on_alarm":                        
+
+        elif command == "buzzer_on_alarm":
             if target == "master":
                 success = self._buzzer.movement_alarm()
                 self._publish_config_confirmation(target, success=success, cmd="buzzer_on_alarm")
             else:
                 self._send_espnow_to(target, {"cmd": "buzzer_on_alarm"})
-        elif command == "buzzer_on_warning":                    
+
+        elif command == "buzzer_on_warning":
             if target == "master":
                 success = self._buzzer.gas_alarm()
                 self._publish_config_confirmation(target, success=success, cmd="buzzer_on_warning")
             else:
                 self._send_espnow_to(target, {"cmd": "buzzer_on_warning"})
+
         elif command == "buzzer_off":
             if target == "master":
                 success = self._buzzer.buzzer_stop()
                 self._publish_config_confirmation(target, success=success, cmd="buzzer_off")
             else:
                 self._send_espnow_to(target, {"cmd": "buzzer_off"})
-        elif command == "sleep":                
+
+        elif command == "deep_sleep":
             if target == "master":
                 self._publish_config_confirmation(self._node_id, success=True, cmd="deep_sleep")
+                deadline = time.ticks_ms()
+                while True:
+                    await asyncio.sleep_ms(100)
+                    with self._mqtt_out_lock:
+                        empty = len(self._mqtt_out_queue) == 0
+                    if empty:
+                        break
+                    if time.ticks_diff(time.ticks_ms(), deadline) > 3000:
+                        break  
                 self._enter_master_deep_sleep()
-            else:
-                self._send_espnow_to(target, {"cmd": "sleep"})
-        elif command == "reboot":                
+
+        elif command == "reboot":
             if target == "master":
                 self._publish_config_confirmation(self._node_id, success=True, cmd="reboot")
+                deadline = time.ticks_ms()
+                while True:
+                    await asyncio.sleep_ms(100)
+                    with self._mqtt_out_lock:
+                        empty = len(self._mqtt_out_queue) == 0
+                    if empty:
+                        break
+                    if time.ticks_diff(time.ticks_ms(), deadline) > 3000:
+                        break
                 self._soft_reboot("server command")
-            else:
-                self._send_espnow_to(target, {"cmd": "reboot"})
 
     def _publish_config_request(self, node_id: str) -> None:
         topic = f"securifi/config/request/{self._own_mac}"
@@ -471,4 +495,3 @@ class MasterNode(SecuriFiNode):
         self._mqtt_shutdown = True
         time.sleep_ms(200)
         self._enter_deep_sleep()
-
