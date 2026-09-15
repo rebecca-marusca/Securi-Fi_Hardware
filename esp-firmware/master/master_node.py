@@ -98,6 +98,9 @@ class MasterNode(SecuriFiNode):
     def _handle_slave_packet(self, mac: bytes, data: bytes) -> None:
         state = self._slave_states.get(mac)
         if state is None:
+            known = [":".join(f"{b:02X}" for b in m) for m in self._slave_states.keys()]
+            received = ":".join(f"{b:02X}" for b in mac)
+            print(f"[{self._node_id}] Unknown slave MAC {received}, known: {known}")
             return
 
         try:
@@ -106,22 +109,26 @@ class MasterNode(SecuriFiNode):
             print(f"[{self._node_id}] Failed to parse slave packet from {mac}: {e}")
             return
 
-        if "confirmed" in payload:
+        if payload.get("type") == "confirmed":
             self._publish_config_confirmation(
                 node_id=state.node_id,
                 cmd=payload.get("cmd", None),
-                success=payload.get("confirmed", False)
+                success=payload.get("success", False),
             )
+            state.last_seen_ms = time.ticks_ms()
+            return
 
         if payload.get("cmd") == "state_request":
             response = "arm" if self._state == self.STATE_ARMED else "standby"
             try:
-                self._espnow.send(mac, json.dumps({"cmd": response}).encode("utf-8"))
+                self._espnow.send(mac, json.dumps({"cmd": response, "state_sync": True}).encode("utf-8"))
                 print(f"[{self._node_id}] Answered state_request from {state.node_id}: {response}")
             except OSError as e:
                 print(f"[{self._node_id}] Failed to answer state_request from {state.node_id}: {e}")
-                return
-        
+            state.last_seen_ms = time.ticks_ms()
+            return
+
+        # anything else is an actual telemetry reading
         state.reading = payload
         state.last_seen_ms = time.ticks_ms()
         

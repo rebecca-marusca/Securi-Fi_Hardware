@@ -99,6 +99,7 @@ class SecuriFiNode:
         self._wifi_ssid = wifi_ssid
         self._wifi_password = wifi_password
         self._state = self.STATE_BOOT
+        self._start_time = 0
 
         self._detector = MVSDetector()
         self._mq2 = MQ2Sensor(pin=mq2_pin, threshold=mq2_threshold)
@@ -212,6 +213,11 @@ class SecuriFiNode:
     async def _main_loop(self) -> None:
         coroutines = [self._loop_sensor_poll(), self._loop_watchdog(), self._loop_buzzer_update()]
         coroutines.extend(self._subclass_coroutines())
+        timer = time.time()
+        elapsed =timer - self._start_time
+        if elapsed>=5:
+            self._start_time = time.time() 
+            print(f"{self.node_id} i am running")
 
         await asyncio.gather(*coroutines)
 
