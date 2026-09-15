@@ -13,6 +13,7 @@ class SlaveNode(SecuriFiNode):
         self._master_mac = master_mac
         self._master_mac_bytes = self._parse_mac(self._master_mac) if master_mac else None
         self._espnow = None
+        self._state_response_received = False
 
         self._tx_success = 0
         self._tx_failed = 0
@@ -45,8 +46,10 @@ class SlaveNode(SecuriFiNode):
 
     def _handle_espnow_command(self, cmd: dict) -> None:
         command = cmd.get("cmd")
+        is_state_sync = cmd.get("state_sync", False)
 
         if command == "arm":
+                self._state_response_received = True
                 sensing = self._resume_sensing()
                 mq2_state = self._mq2.power_switch(True)
                 success = sensing and mq2_state
@@ -55,15 +58,18 @@ class SlaveNode(SecuriFiNode):
                     print(f"[{self._node_id}] ARMED")
                 else:
                     print(f"[{self._node_id}] Failed to arm — staying in current state")
-                self._send_confirmation_to_master(success=success, cmd="arm")
+                if not is_state_sync:
+                    self._send_confirmation_to_master(success=success, cmd="arm")
         elif command == "standby":
+                self._state_response_received=True
                 sensing = self._pause_sensing()
                 mq2_state = self._mq2.power_switch(False)
                 buzzer_off = self._buzzer.buzzer_stop()
                 success = sensing and mq2_state and buzzer_off
                 self._state = self.STATE_STANDBY
                 print(f"[{self._node_id}] STANDBY")
-                self._send_confirmation_to_master(success=success, cmd="disarm")
+                if not is_state_sync:
+                    self._send_confirmation_to_master(success=success, cmd="disarm")
         elif command == "buzzer_on_alarm":
                 success = self._buzzer.movement_alarm()
                 self._send_confirmation_to_master(success=success, cmd="buzzer_on_alarm")
@@ -82,12 +88,15 @@ class SlaveNode(SecuriFiNode):
 
     def _send_confirmation_to_master(self, success: bool, cmd: str) -> None:
         payload = json.dumps({
-            "type": "confirm",
+            "type": "confirmed",
             "node_id": self._node_id,
             "cmd": cmd,
             "success": success
         })
-        self._espnow.send(self._master_mac_bytes, payload.encode("utf-8"))
+        try:
+            self._espnow.send(self._master_mac_bytes, payload.encode("utf-8"))
+        except OSError as e:
+            print(f"[{self._node_id}] Failed to send confirmation: {e}")
 
 
 
@@ -136,8 +145,8 @@ class SlaveNode(SecuriFiNode):
         if self._espnow is None or self._master_mac_bytes is None:
             return
 
-        initial_state = self._state
-        for attempt in range(3):
+        self._state_response_received = False
+        for attempt in range(5):
             try:
                 payload = json.dumps({"cmd": "state_request"}).encode("utf-8")
                 self._espnow.send(self._master_mac_bytes, payload)
@@ -145,9 +154,10 @@ class SlaveNode(SecuriFiNode):
             except OSError as e:
                 print(f"[{self._node_id}] Failed to request state: {e}")
 
-            await asyncio.sleep_ms(1000)
+            await asyncio.sleep_ms(2000)
 
-            if self._state != initial_state:
+            if self._state_response_received:
+                print(f"[{self._node_id}] State confirmed from master: {self._state}")
                 return
 
         print(f"[{self._node_id}] No response from master, staying in standby")

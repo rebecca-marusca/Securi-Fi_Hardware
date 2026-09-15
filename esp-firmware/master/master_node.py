@@ -303,7 +303,8 @@ class MasterNode(SecuriFiNode):
                 self._send_espnow_to(target, {"cmd": "sleep"})
         elif command == "reboot":                
             if target == "master":
-                success = self._soft_reboot("server command")
+                self._publish_config_confirmation(self._node_id, success=True, cmd="reboot")
+                self._soft_reboot("server command")
             else:
                 self._send_espnow_to(target, {"cmd": "reboot"})
 
@@ -359,8 +360,8 @@ class MasterNode(SecuriFiNode):
                     "armed": False,
                     "movement_pct": None,
                     "sensor_reading": None,
-                    "report_type": "",
-                    "warning_type": "",
+                    "report_type": "not_transmitting",
+                    "warning_type": None,
                     "battery_pct": 0
                 })
             else:
