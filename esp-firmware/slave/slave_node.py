@@ -5,6 +5,15 @@ from shared.securifi_node import SecuriFiNode
 from shared.hardware.button.button import Button
 from config import MASTER_MAC, ESPNOW_TX_INTERVAL_MS, ESPNOW_CHANNEL, ESPNOW_MAX_RETRIES
 
+_STATE_NAMES = {
+    0: "BOOT",
+    1: "CALIBRATING",
+    2: "STANDBY",
+    3: "ARMED",
+    4: "DEEP_SLEEP",
+    5: "ERROR",
+}
+
 
 class SlaveNode(SecuriFiNode):
     def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, master_mac: str = MASTER_MAC, mq2_pin: int = 2, mq2_threshold: int = 1500, battery_pin: int = 3, traffic_rate_pps: int = 20):
@@ -160,7 +169,7 @@ class SlaveNode(SecuriFiNode):
             await asyncio.sleep_ms(2000)
 
             if self._state_response_received:
-                print(f"[{self._node_id}] State confirmed from master: {self._state}")
+                print(f"[{self._node_id}] State confirmed from master: {_STATE_NAMES.get(self._state, self._state)}")
                 return
 
         print(f"[{self._node_id}] No response from master, staying in standby")
@@ -216,6 +225,7 @@ class SlaveNode(SecuriFiNode):
     
     async def _on_long_press(self) -> None:
         print(f"[{self._node_id}] Button: long press - entering boot mode")
+        self._send_confirmation_to_master(success=True, cmd="reboot")
         #TODO enter boot mode in onboarding
         await asyncio.sleep_ms(300)
         self._soft_reboot("onboarding_request")
