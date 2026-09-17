@@ -212,9 +212,9 @@ class SlaveNode(SecuriFiNode):
         while self._running:
             result = self._button.press_check()
             if result == "long":
-                self._on_long_press()
+                await self._on_long_press()
             elif result == "short":
-                self._on_short_press()
+                await self._on_short_press()
             await asyncio.sleep_ms(50)
     
     async def _on_short_press(self) -> None:

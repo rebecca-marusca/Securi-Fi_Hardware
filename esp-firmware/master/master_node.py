@@ -432,19 +432,22 @@ class MasterNode(SecuriFiNode):
         while self._running:
             result = self._button.press_check()
             if result == "long":
-                self._on_long_press()
+                await self._on_long_press()
             elif result == "short":
-                self._on_short_press()
+                await self._on_short_press()
             await asyncio.sleep_ms(50)
 
-    def _on_short_press(self) -> None:
+    async def _on_short_press(self) -> None:
         print(f"[{self._node_id}] Button: entering deep sleep")
         self._publish_config_confirmation(self._node_id, success=True, cmd="deep_sleep")
+        await asyncio.sleep_ms(300)
         self._enter_master_deep_sleep()
 
-    def _on_long_press(self) -> None:
+    async def _on_long_press(self) -> None:
         print(f"[{self._node_id}] Button: long press - entering boot mode")
+        self._publish_config_confirmation(self._node_id, success=True, cmd="reboot")
         #TODO enter boot mode in onboarding
+        await asyncio.sleep_ms(300)
         self._soft_reboot("onboarding_request")
 
 
