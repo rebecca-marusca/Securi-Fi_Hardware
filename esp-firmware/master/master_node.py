@@ -110,11 +110,15 @@ class MasterNode(SecuriFiNode):
             return
 
         if payload.get("type") == "confirmed":
+            cmd=payload.get("cmd", None)
+            success=payload.get("success", False)
             self._publish_config_confirmation(
                 node_id=state.node_id,
-                cmd=payload.get("cmd", None),
-                success=payload.get("success", False),
+                cmd=cmd,
+                success=success,
             )
+            print(f"[{self.node_id}] recived confirmation from {state.node_id}, about: {cmd} with success: {success}")
+            # can ignore some confirmations if its too much
             state.last_seen_ms = time.ticks_ms()
             return
 
@@ -194,9 +198,7 @@ class MasterNode(SecuriFiNode):
                     self._mqtt.check_msg()
     
                 if time.ticks_diff(time.ticks_ms(), last_ping) > PING_INTERVAL_MS:
-                    print(f"[{self._node_id}] before ping")
                     self._mqtt.ping()
-                    print(f"[{self._node_id}] after ping")
                     last_ping = time.ticks_ms()
 
                 with self._mqtt_out_lock:

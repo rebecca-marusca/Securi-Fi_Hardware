@@ -44,7 +44,7 @@ class SlaveNode(SecuriFiNode):
             print(f"[{self._node_id}] ESP-NOW init failed: {e}")
             self._soft_reboot(self.ERR_ESPNOW_FAILED)
 
-    def _handle_espnow_command(self, cmd: dict) -> None:
+    async def _handle_espnow_command(self, cmd: dict) -> None:
         command = cmd.get("cmd")
         is_state_sync = cmd.get("state_sync", False)
 
@@ -81,8 +81,11 @@ class SlaveNode(SecuriFiNode):
                 self._send_confirmation_to_master(success=success, cmd="buzzer_off")
         elif command == "sleep":
                 self._send_confirmation_to_master(success=True, cmd="deep_sleep")
+                await asyncio.sleep_ms(300)
                 self._enter_deep_sleep()
         elif command == "reboot":
+                self._send_confirmation_to_master(success=True, cmd="reboot")
+                await asyncio.sleep_ms(300)
                 self._soft_reboot("master_command")
         
 
@@ -133,7 +136,7 @@ class SlaveNode(SecuriFiNode):
 
                     try:
                         cmd = json.loads(data.decode("utf-8"))
-                        self._handle_espnow_command(cmd)
+                        await self._handle_espnow_command(cmd)
                     except ValueError as e:
                         print(f"[{self._node_id}] Failed to parse command: {e}")
             except OSError as e:
@@ -205,14 +208,16 @@ class SlaveNode(SecuriFiNode):
                 self._on_short_press()
             await asyncio.sleep_ms(50)
     
-    def _on_short_press(self) -> None:
+    async def _on_short_press(self) -> None:
         print(f"[{self._node_id}] Button: entering deep sleep")
         self._send_confirmation_to_master(success=True, cmd="deep_sleep")
+        await asyncio.sleep_ms(300)
         self._enter_deep_sleep()
     
-    def _on_long_press(self) -> None:
+    async def _on_long_press(self) -> None:
         print(f"[{self._node_id}] Button: long press - entering boot mode")
         #TODO enter boot mode in onboarding
+        await asyncio.sleep_ms(300)
         self._soft_reboot("onboarding_request")
     
 
