@@ -15,13 +15,13 @@ def read_node_id() -> str:
 
 
 def boot() -> None:
-    from config import WIFI_PASSWORD, WIFI_SSID, SLAVE_MACS, MQ2_PIN, MQ2_THRESHOLD, TRAFFIC_RATE_PPS
+    from config import WIFI_PASSWORD, WIFI_SSID, SLAVE_MACS, MQ2_PIN, MQ2_THRESHOLD, BATTERY_PIN, TRAFFIC_RATE_PPS
     from master_node import MasterNode
 
     node_id = read_node_id()
     print(f"[boot] Starting as {node_id}")
 
-    node = MasterNode(node_id=node_id, wifi_ssid=WIFI_SSID, wifi_password=WIFI_PASSWORD, slave_macs=SLAVE_MACS, mq2_pin=MQ2_PIN, mq2_threshold=MQ2_THRESHOLD, traffic_rate_pps=TRAFFIC_RATE_PPS)
+    node = MasterNode(node_id=node_id, wifi_ssid=WIFI_SSID, wifi_password=WIFI_PASSWORD, slave_macs=SLAVE_MACS, mq2_pin=MQ2_PIN, mq2_threshold=MQ2_THRESHOLD, battery_pin=BATTERY_PIN, traffic_rate_pps=TRAFFIC_RATE_PPS)
 
     node.start()
 

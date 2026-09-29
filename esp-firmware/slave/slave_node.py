@@ -1,25 +1,37 @@
 import asyncio
 import json
 
-from  shared.securifi_node import SecuriFiNode
+from shared.securifi_node import SecuriFiNode
+from shared.hardware.button.button import Button
 from config import MASTER_MAC, ESPNOW_TX_INTERVAL_MS, ESPNOW_CHANNEL, ESPNOW_MAX_RETRIES
+
+_STATE_NAMES = {
+    0: "BOOT",
+    1: "CALIBRATING",
+    2: "STANDBY",
+    3: "ARMED",
+    4: "DEEP_SLEEP",
+    5: "ERROR",
+}
 
 
 class SlaveNode(SecuriFiNode):
-    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, master_mac: str = MASTER_MAC, mq2_pin: int = 2, mq2_threshold: int = 1500, traffic_rate_pps: int = 20):
-        super().__init__(node_id=node_id, wifi_ssid=wifi_ssid, wifi_password=wifi_password, mq2_pin=mq2_pin, mq2_threshold=mq2_threshold, traffic_rate_pps=traffic_rate_pps)
+    def __init__(self, node_id: str, wifi_ssid: str, wifi_password: str, master_mac: str = MASTER_MAC, mq2_pin: int = 2, mq2_threshold: int = 1500, battery_pin: int = 3, traffic_rate_pps: int = 20):
+        super().__init__(node_id=node_id, wifi_ssid=wifi_ssid, wifi_password=wifi_password, mq2_pin=mq2_pin, mq2_threshold=mq2_threshold, battery_pin=battery_pin, traffic_rate_pps=traffic_rate_pps)
 
         self._master_mac = master_mac
         self._master_mac_bytes = self._parse_mac(self._master_mac) if master_mac else None
         self._espnow = None
+        self._state_response_received = False
 
         self._tx_success = 0
         self._tx_failed = 0
 
+
     # hook:
     def _subclass_coroutines(self) -> list:
         self._init_espnow()
-        return [self._loop_espnow_tx()]
+        return [self._loop_espnow_tx(), self._loop_espnow_rx(), self._loop_request_state(), self._loop_button_poll()]
 
 
     # esp-now:
@@ -33,10 +45,71 @@ class SlaveNode(SecuriFiNode):
                 raise RuntimeError("MASTER_MAC not set in config")
             self._espnow.add_peer(self._master_mac_bytes, channel=ESPNOW_CHANNEL)
 
-            print(f"[{self._node_id}]: ESP-NOW initialized, master peer: {self._master_mac}")
+            print(f"[{self._node_id}] ESP-NOW initialized, master peer: {self._master_mac}")
         except ImportError:
             print("Asigurati-va ca sunteti pe MicroPython :))")
             self._espnow = None
+        except (RuntimeError, OSError) as e:
+            print(f"[{self._node_id}] ESP-NOW init failed: {e}")
+            self._soft_reboot(self.ERR_ESPNOW_FAILED)
+
+    async def _handle_espnow_command(self, cmd: dict) -> None:
+        command = cmd.get("cmd")
+        is_state_sync = cmd.get("state_sync", False)
+
+        if command == "arm":
+                self._state_response_received = True
+                sensing = self._resume_sensing()
+                mq2_state = self._mq2.power_switch(True)
+                success = sensing and mq2_state
+                if success:
+                    self._state = self.STATE_ARMED
+                    print(f"[{self._node_id}] ARMED")
+                else:
+                    print(f"[{self._node_id}] Failed to arm — staying in current state")
+                if not is_state_sync:
+                    self._send_confirmation_to_master(success=success, cmd="arm")
+        elif command == "standby":
+                self._state_response_received=True
+                sensing = self._pause_sensing()
+                mq2_state = self._mq2.power_switch(False)
+                buzzer_off = self._buzzer.buzzer_stop()
+                success = sensing and mq2_state and buzzer_off
+                self._state = self.STATE_STANDBY
+                print(f"[{self._node_id}] STANDBY")
+                if not is_state_sync:
+                    self._send_confirmation_to_master(success=success, cmd="disarm")
+        elif command == "buzzer_on_alarm":
+                success = self._buzzer.movement_alarm()
+                self._send_confirmation_to_master(success=success, cmd="buzzer_on_alarm")
+        elif command == "buzzer_on_warning":
+                success = self._buzzer.gas_alarm()
+                self._send_confirmation_to_master(success=success, cmd="buzzer_on_warning")
+        elif command == "buzzer_off":
+                success = self._buzzer.buzzer_stop()
+                self._send_confirmation_to_master(success=success, cmd="buzzer_off")
+        elif command == "sleep":
+                self._send_confirmation_to_master(success=True, cmd="deep_sleep")
+                await asyncio.sleep_ms(300)
+                self._enter_deep_sleep()
+        elif command == "reboot":
+                self._send_confirmation_to_master(success=True, cmd="reboot")
+                await asyncio.sleep_ms(300)
+                self._soft_reboot("master_command")
+        
+
+    def _send_confirmation_to_master(self, success: bool, cmd: str) -> None:
+        payload = json.dumps({
+            "type": "confirmed",
+            "node_id": self._node_id,
+            "cmd": cmd,
+            "success": success
+        })
+        try:
+            self._espnow.send(self._master_mac_bytes, payload.encode("utf-8"))
+        except OSError as e:
+            print(f"[{self._node_id}] Failed to send confirmation: {e}")
+
 
 
     # tx loop
@@ -44,17 +117,63 @@ class SlaveNode(SecuriFiNode):
         while not self._detector.is_calibrated:
             await asyncio.sleep_ms(200)
 
-        print(f"[{self._node_id}]: Starting ESP-NOW TX")
+        print(f"[{self._node_id}] Calibrated, entering standby")
 
         while self._running:
-            reading = self.get_reading()
+            if self._state == self.STATE_ARMED:
+                reading = self.get_reading()
 
-            if reading is not None:
-                payload = self._build_payload(reading)
-                await self._send_with_retry(payload)
+                if reading is not None:
+                    payload = self._build_payload(reading)
+                    await self._send_with_retry(payload)
 
             await asyncio.sleep_ms(ESPNOW_TX_INTERVAL_MS)
 
+    async def _loop_espnow_rx(self) -> None: 
+        while self._running:
+            if self._espnow is None:
+                await asyncio.sleep_ms(100)
+                continue
+
+            try:
+                result = self._espnow.recv(0) 
+                if result is not None:  
+                    mac, data = result
+                    if mac is None or data is None:
+                        await asyncio.sleep_ms(10)
+                        continue
+
+                    try:
+                        cmd = json.loads(data.decode("utf-8"))
+                        await self._handle_espnow_command(cmd)
+                    except ValueError as e:
+                        print(f"[{self._node_id}] Failed to parse command: {e}")
+            except OSError as e:
+                print(f"[{self._node_id}] ESP-NOW recv error: {e}")
+
+            await asyncio.sleep_ms(10)
+
+    async def _loop_request_state(self) -> None:
+        if self._espnow is None or self._master_mac_bytes is None:
+            return
+
+        self._state_response_received = False
+        for attempt in range(5):
+            try:
+                payload = json.dumps({"cmd": "state_request"}).encode("utf-8")
+                self._espnow.send(self._master_mac_bytes, payload)
+                print(f"[{self._node_id}] Requested current state from master (attempt {attempt + 1})")
+            except OSError as e:
+                print(f"[{self._node_id}] Failed to request state: {e}")
+
+            await asyncio.sleep_ms(2000)
+
+            if self._state_response_received:
+                print(f"[{self._node_id}] State confirmed from master: {_STATE_NAMES.get(self._state, self._state)}")
+                return
+
+        print(f"[{self._node_id}] No response from master, staying in standby")
+        
     async def _send_with_retry(self, payload: bytes) -> None:
         if self._espnow is None:
             return
@@ -71,6 +190,7 @@ class SlaveNode(SecuriFiNode):
                 await asyncio.sleep_ms(100 * (attempt + 1))
 
         self._tx_failed += 1
+        print(f"[{self._node_id}] Failed to send after {ESPNOW_MAX_RETRIES} attempts, total failures: {self._tx_failed}")
 
 
     def _build_payload(self, reading) -> bytes:
@@ -78,18 +198,44 @@ class SlaveNode(SecuriFiNode):
             "id": reading.node_id,
             "ts": reading.timestamp,
             "mvt": reading.movement_pct,
-            "st": reading.state,
-            "gas": reading.gas_detected,
+            "rep": reading.report_type,
+            "war": reading.warning_type,
+            "mq2": reading.sensor_reading,
+            "bat": reading.battery_pct,
             "pkt": reading.packets_sent,
-            "drp": reading.packets_dropped,
-            "mq2": reading.raw_mq2_reading
+            "drp": reading.packets_dropped
         }
 
         return json.dumps(data).encode("utf-8") # dict -> str -> bytes ca esp-now poate transmite numai bytes
 
+    async def _loop_button_poll(self) -> None:
+        while self._running:
+            result = self._button.press_check()
+            if result == "long":
+                await self._on_long_press()
+            elif result == "short":
+                await self._on_short_press()
+            await asyncio.sleep_ms(50)
+    
+    async def _on_short_press(self) -> None:
+        print(f"[{self._node_id}] Button: entering deep sleep")
+        self._send_confirmation_to_master(success=True, cmd="deep_sleep")
+        await asyncio.sleep_ms(300)
+        self._enter_deep_sleep()
+    
+    async def _on_long_press(self) -> None:
+        print(f"[{self._node_id}] Button: long press - entering boot mode")
+        self._send_confirmation_to_master(success=True, cmd="reboot")
+        #TODO enter boot mode in onboarding
+        await asyncio.sleep_ms(300)
+        self._soft_reboot("onboarding_request")
+    
 
     # helper:
     @staticmethod
     def _parse_mac(mac_str: str) -> bytes:
         parts = mac_str.strip().split(":")
         return bytes(int(p, 16) for p in parts)
+
+    
+    

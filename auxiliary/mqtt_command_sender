@@ -1,0 +1,114 @@
+import json
+import paho.mqtt.client as mqtt
+
+
+# =========================
+# CONFIGURATION
+# =========================
+
+MQTT_BROKER = "192.168.137.1"   # IP address of the PC running Mosquitto
+MQTT_PORT = 1883
+
+NODE_MAC = "58:E6:C5:12:05:E0"
+
+COMMAND_TOPIC = f"securifi/config/command/{NODE_MAC}"
+
+
+# =========================
+# MQTT
+# =========================
+
+client = mqtt.Client()
+
+try:
+    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.loop_start()
+    print(f"Connected to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
+except Exception as e:
+    print(f"Could not connect to MQTT broker: {e}")
+    exit(1)
+
+
+# =========================
+# COMMANDS
+# =========================
+
+COMMANDS = {
+    "arm": "arm",
+    "standby": "standby",
+    "sleep": "sleep",
+    "reboot": "reboot",
+}
+
+
+def send_command(command: str, node_id: str):
+    data = {
+        "cmd": command,
+        "node_id": node_id
+    }
+
+    payload = json.dumps(data)
+
+    result = client.publish(COMMAND_TOPIC, payload)
+
+    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        print(f"Sent: {payload}")
+        print(f"Topic: {COMMAND_TOPIC}")
+    else:
+        print(f"Failed to send command. MQTT error code: {result.rc}")
+
+
+# =========================
+# MAIN
+# =========================
+
+print()
+print("MQTT Command Sender")
+print("===================")
+print()
+print("Available commands:")
+print("  arm")
+print("  standby")
+print("  sleep")
+print("  reboot")
+print("  exit")
+print()
+print("Press Ctrl+C to exit.")
+print()
+
+try:
+    while True:
+        command = input("> ").strip().lower()
+
+        # Exit
+        if command == "exit":
+            break
+
+        # Check command
+        if command not in COMMANDS:
+            print("Unknown command.")
+            print("Available: arm, standby, sleep, reboot, exit")
+            continue
+
+        # Ask which node
+        node_id = input("Node (master/slave): ").strip().lower()
+
+        # Allow exit here too
+        if node_id == "exit":
+            break
+
+        # Check node
+        if node_id not in ("master", "slave"):
+            print("Invalid node. Use 'master' or 'slave'.")
+            continue
+
+        # Send command
+        send_command(COMMANDS[command], node_id)
+
+except KeyboardInterrupt:
+    print("\nExiting...")
+
+finally:
+    client.loop_stop()
+    client.disconnect()
+    print("Disconnected.")

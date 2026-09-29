@@ -1,18 +1,21 @@
+#battery 0 mq2 -r 1 -p 2 button 3 buzzer 8
+
 # wifi
-WIFI_SSID = "" # TODO
-WIFI_PASSWORD = "" # TODO
+WIFI_SSID = "SecuriFi-Hub" # TODO
+WIFI_PASSWORD = "stefanecelmaitare--Rebecca06/07" # TODO
 
-MASTER_MAC = "" # TODO
+MASTER_MAC = "58:E6:C5:12:05:E0" # COM6 # TODO
 
-MQ2_PIN = None # TODO
-MQ2_THRESHOLD = None # TODO
+MQ2_PIN = 1 # TODO
+MQ2_THRESHOLD = 1500 # TODO
+
+BATTERY_PIN = 0 # TODO
 
 # traffic generator
 TRAFFIC_RATE_PPS = 20
 
 # mvs 
 GAIN_LOCK_PACKETS = 100
-THRESHOLD_MULT = 2.3 # TODO
 
 # esp now:
 ESPNOW_CHANNEL = None # TODO

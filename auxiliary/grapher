@@ -8,7 +8,7 @@ import os
 import re
 import threading
 
-MQTT_BROKER = ""  # TODO: Pi IP 
+MQTT_BROKER = "192.168.137.1"  # TODO: Pi IP 
 MQTT_PORT = 1883
 MQTT_TOPIC = "securifi/master"
 
