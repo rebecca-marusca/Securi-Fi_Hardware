@@ -1332,6 +1332,34 @@ Examples:
         help='Serial port (auto-detected if omitted)'
     )
 
+    flash_p.add_argument(
+        '--erase',
+        action='store_true',
+        help='Erase flash before flashing'
+    )
+
+    flash_p.add_argument(
+        '--firmware',
+        help='Path to a custom firmware .bin'
+    )
+
+    deploy_p = sub.add_parser(
+        'deploy',
+        help='Deploy master or slave code to the board'
+    )
+
+    deploy_p.add_argument(
+        '--node',
+        choices=['master', 'slave'],
+        required=True,
+        help='Which node type to deploy'
+    )
+
+    deploy_p.add_argument(
+        '--port',
+        help='Serial port (auto-detected if omitted)'
+    )
+
     deploy_p.add_argument(
         '--slave_id',
         choices=['1', '2', '3'],
